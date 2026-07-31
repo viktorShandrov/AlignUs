@@ -17,6 +17,7 @@ export const sessions = pgTable('sessions', {
 export const participants = pgTable('participants', {
   id: uuid('id').defaultRandom().primaryKey(),
   sessionId: uuid('session_id').notNull().references(() => sessions.id, { onDelete: 'cascade' }),
+  userId: text('user_id'),
   name: text('name').notNull(),
   note: text('note'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

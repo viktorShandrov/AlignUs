@@ -7,9 +7,12 @@ import { Session, Participant, Availability, FinalizedSlot } from './types';
 import { getSession, getSessionAvailabilities, saveParticipantAvailability, setSessionFinalizedSlot } from './lib/storage';
 import { generateSlotsForRange } from './lib/dateUtils';
 import { computeHeatmapGrid, findBestSlotWindows } from './lib/heatmap';
+import { getOrCreateUserId } from './lib/user';
 import { Loader2, AlertCircle } from 'lucide-react';
 
 export function App() {
+  const [userId] = useState<string>(() => getOrCreateUserId());
+
   const [sessionId, setSessionId] = useState<string | null>(() => {
     const path = window.location.pathname;
     if (path.includes('/session/')) {
@@ -102,7 +105,7 @@ export function App() {
     if (!sessionId || !currentName.trim()) return;
 
     try {
-      await saveParticipantAvailability(sessionId, currentName.trim(), slots, currentNote.trim());
+      await saveParticipantAvailability(sessionId, userId, currentName.trim(), slots, currentNote.trim());
       await loadSessionData();
     } catch (err) {
       console.error('Failed saving availability:', err);
@@ -120,7 +123,7 @@ export function App() {
   };
 
   const myParticipant = participants.find(
-    p => p.name.trim().toLowerCase() === currentName.trim().toLowerCase()
+    p => (p.userId && p.userId === userId) || (!p.userId && currentName.trim() && p.name.trim().toLowerCase() === currentName.trim().toLowerCase())
   );
 
   const mySelectedSlots = React.useMemo(() => {

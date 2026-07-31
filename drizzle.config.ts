@@ -8,3 +8,5 @@ export default defineConfig({
     url: process.env.VITE_NEON_DATABASE_URL || process.env.DATABASE_URL || '',
   },
 });
+
+

@@ -24,6 +24,7 @@ export interface Session {
 export interface Participant {
   id: string;
   sessionId: string;
+  userId?: string | null;
   name: string;
   note?: string | null;
   createdAt: string;

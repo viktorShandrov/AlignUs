@@ -110,6 +110,7 @@ export async function getSessionParticipants(sessionId: string): Promise<Partici
       rawParticipants = res.map(r => ({
         id: r.id,
         sessionId: r.sessionId,
+        userId: r.userId || null,
         name: r.name,
         note: r.note || null,
         createdAt: new Date(r.createdAt).toISOString(),
@@ -124,23 +125,7 @@ export async function getSessionParticipants(sessionId: string): Promise<Partici
     rawParticipants = Object.values(localParticipants).filter(p => p.sessionId === sessionId);
   }
 
-  // Deduplicate participants strictly by normalized name string
-  const uniqueMap = new Map<string, Participant>();
-  rawParticipants.forEach(p => {
-    const norm = p.name.trim().toLowerCase();
-    if (!norm) return;
-    if (!uniqueMap.has(norm)) {
-      uniqueMap.set(norm, p);
-    } else {
-      // Keep note if existing is empty
-      const existing = uniqueMap.get(norm)!;
-      if (!existing.note && p.note) {
-        existing.note = p.note;
-      }
-    }
-  });
-
-  return Array.from(uniqueMap.values());
+  return rawParticipants;
 }
 
 export async function getSessionAvailabilities(sessionId: string): Promise<{
@@ -182,6 +167,7 @@ export async function getSessionAvailabilities(sessionId: string): Promise<{
 
 export async function saveParticipantAvailability(
   sessionId: string,
+  userId: string,
   participantName: string,
   selectedSlots: Array<{ startSlot: string; endSlot: string; isPreferred: boolean }>,
   note?: string
@@ -191,17 +177,19 @@ export async function saveParticipantAvailability(
     throw new Error('Participant name cannot be empty');
   }
 
-  const normName = cleanName.toLowerCase();
   const existingPts = await getSessionParticipants(sessionId);
   
-  // Find any existing match by normalized name
-  const existingMatch = existingPts.find(p => p.name.trim().toLowerCase() === normName);
+  // Find any existing match by userId, or fallback to name for legacy records
+  const existingMatch = existingPts.find(
+    p => (p.userId && p.userId === userId) || (!p.userId && p.name.trim().toLowerCase() === cleanName.toLowerCase())
+  );
 
   const participantId = existingMatch ? existingMatch.id : crypto.randomUUID();
 
   const participant: Participant = {
     id: participantId,
     sessionId,
+    userId,
     name: cleanName,
     note: note !== undefined ? note : existingMatch?.note || null,
     createdAt: existingMatch?.createdAt || new Date().toISOString(),
@@ -209,30 +197,20 @@ export async function saveParticipantAvailability(
 
   if (isNeonConfigured && db) {
     try {
-      // Fetch all DB records for this session with this name to clean up duplicates
-      const allDbPts = await db.select().from(participants).where(eq(participants.sessionId, sessionId));
-      const duplicates = allDbPts.filter(p => p.name.trim().toLowerCase() === normName);
-
-      if (duplicates.length === 0) {
+      if (!existingMatch) {
         await db.insert(participants).values({
           id: participantId,
           sessionId,
+          userId,
           name: cleanName,
           note: participant.note,
           createdAt: new Date(),
         });
       } else {
-        // Update main record
         await db
           .update(participants)
-          .set({ name: cleanName, note: participant.note })
+          .set({ userId, name: cleanName, note: participant.note })
           .where(eq(participants.id, participantId));
-
-        // Delete any extra duplicate participant IDs if they were created before
-        const extraDuplicateIds = duplicates.map(d => d.id).filter(id => id !== participantId);
-        if (extraDuplicateIds.length > 0) {
-          await db.delete(participants).where(inArray(participants.id, extraDuplicateIds));
-        }
       }
 
       // Overwrite availabilities for this participant
@@ -256,16 +234,8 @@ export async function saveParticipantAvailability(
     }
   }
 
-  // Local storage fallback with strict deduplication
+  // Local storage fallback
   const localPts = getLocalData<Record<string, Participant>>('participants', {});
-  
-  // Remove any duplicates with same normalized name
-  Object.keys(localPts).forEach(k => {
-    if (localPts[k].sessionId === sessionId && localPts[k].name.trim().toLowerCase() === normName) {
-      delete localPts[k];
-    }
-  });
-
   localPts[participantId] = participant;
   setLocalData('participants', localPts);
 
