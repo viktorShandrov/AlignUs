@@ -184,6 +184,15 @@ export async function saveParticipantAvailability(
     p => (p.userId && p.userId === userId) || (!p.userId && p.name.trim().toLowerCase() === cleanName.toLowerCase())
   );
 
+  // Prevent using a name that is already taken by another participant in the session
+  const nameTaken = existingPts.some(
+    p => p.id !== existingMatch?.id && p.name.trim().toLowerCase() === cleanName.toLowerCase()
+  );
+
+  if (nameTaken) {
+    throw new Error(`The name "${cleanName}" is already taken by another participant in this session.`);
+  }
+
   const participantId = existingMatch ? existingMatch.id : crypto.randomUUID();
 
   const participant: Participant = {

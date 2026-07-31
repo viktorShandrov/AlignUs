@@ -181,6 +181,7 @@ export function App() {
               availabilities={availabilities}
               currentName={currentName}
               currentNote={currentNote}
+              currentUserId={userId}
               onNameChange={handleNameChange}
               onNoteChange={handleNoteChange}
               hoveredParticipantId={hoveredParticipantId}

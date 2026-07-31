@@ -1,6 +1,6 @@
 import React from 'react';
 import { Participant, Availability } from '../types';
-import { Users, UserCheck, Star, UserPlus, MessageSquare } from 'lucide-react';
+import { Users, UserCheck, Star, UserPlus, MessageSquare, AlertCircle } from 'lucide-react';
 import { getParticipantColor } from '../lib/colors';
 
 interface ParticipantListProps {
@@ -8,6 +8,7 @@ interface ParticipantListProps {
   availabilities: Availability[];
   currentName: string;
   currentNote: string;
+  currentUserId?: string;
   onNameChange: (name: string) => void;
   onNoteChange: (note: string) => void;
   hoveredParticipantId?: string | null;
@@ -19,11 +20,20 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
   availabilities,
   currentName,
   currentNote,
+  currentUserId,
   onNameChange,
   onNoteChange,
   hoveredParticipantId,
   onHoverParticipant,
 }) => {
+  const isNameTaken = React.useMemo(() => {
+    const norm = currentName.trim().toLowerCase();
+    if (!norm) return false;
+    return participants.some(
+      p => p.name.trim().toLowerCase() === norm && (p.userId ? p.userId !== currentUserId : true)
+    );
+  }, [currentName, participants, currentUserId]);
+
   const statsByParticipant = React.useMemo(() => {
     const stats: Record<string, { total: number; preferred: number }> = {};
     availabilities.forEach(a => {
@@ -52,8 +62,18 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
             value={currentName}
             onChange={e => onNameChange(e.target.value)}
             placeholder="e.g. Alex, Sarah..."
-            className="w-full bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:bg-white text-slate-900 placeholder-slate-400 rounded-lg px-2.5 py-1.5 text-xs transition-all outline-none font-medium shadow-2xs"
+            className={`w-full border text-slate-900 placeholder-slate-400 rounded-lg px-2.5 py-1.5 text-xs transition-all outline-none font-medium shadow-2xs ${
+              isNameTaken
+                ? 'bg-rose-50/50 border-rose-400 focus:border-rose-600 text-rose-900'
+                : 'bg-slate-50 border-slate-200 focus:border-indigo-500 focus:bg-white'
+            }`}
           />
+          {isNameTaken && (
+            <p className="text-[10px] font-bold text-rose-500 flex items-center gap-1 mt-0.5">
+              <AlertCircle className="w-3 h-3 flex-shrink-0" />
+              <span>This name is already taken in this session.</span>
+            </p>
+          )}
         </div>
 
         <div className="space-y-1">
