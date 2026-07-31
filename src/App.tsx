@@ -3,15 +3,13 @@ import { Navbar } from './components/Navbar';
 import { CreateSession } from './components/CreateSession';
 import { CalendarGrid } from './components/CalendarGrid';
 import { ParticipantList } from './components/ParticipantList';
-import { ResultSummary } from './components/ResultSummary';
-import { Session, Participant, Availability } from './types';
-import { getSession, getSessionAvailabilities, saveParticipantAvailability } from './lib/storage';
+import { Session, Participant, Availability, FinalizedSlot } from './types';
+import { getSession, getSessionAvailabilities, saveParticipantAvailability, setSessionFinalizedSlot } from './lib/storage';
 import { generateSlotsForRange } from './lib/dateUtils';
 import { computeHeatmapGrid, findBestSlotWindows } from './lib/heatmap';
 import { Loader2, AlertCircle } from 'lucide-react';
 
 export function App() {
-  // Session state from URL path or query / hash
   const [sessionId, setSessionId] = useState<string | null>(() => {
     const path = window.location.pathname;
     if (path.includes('/session/')) {
@@ -27,34 +25,39 @@ export function App() {
   const [availabilities, setAvailabilities] = useState<Availability[]>([]);
   const [loading, setLoading] = useState<boolean>(Boolean(sessionId));
   const [error, setError] = useState<string | null>(null);
+  const [selectedDuration, setSelectedDuration] = useState<number>(60); // Default 1 hour
 
-  // User participant identity state
   const [currentName, setCurrentName] = useState<string>(() => {
     return localStorage.getItem('syncmeet_my_name') || '';
   });
 
+  const [currentNote, setCurrentNote] = useState<string>(() => {
+    return localStorage.getItem('syncmeet_my_note') || '';
+  });
+
   const [hoveredParticipantId, setHoveredParticipantId] = useState<string | null>(null);
 
-  // Sync participant name to localStorage
   const handleNameChange = (name: string) => {
     setCurrentName(name);
     localStorage.setItem('syncmeet_my_name', name);
   };
 
-  // Navigate to session URL
+  const handleNoteChange = (note: string) => {
+    setCurrentNote(note);
+    localStorage.setItem('syncmeet_my_note', note);
+  };
+
   const navigateToSession = (id: string) => {
     setSessionId(id);
     window.history.pushState({}, '', `/session/${id}`);
   };
 
-  // Navigate back to Home
   const navigateToHome = () => {
     setSessionId(null);
     setSession(null);
     window.history.pushState({}, '', '/');
   };
 
-  // Fetch session data & availabilities
   const loadSessionData = useCallback(async () => {
     if (!sessionId) return;
     try {
@@ -77,7 +80,6 @@ export function App() {
     }
   }, [sessionId]);
 
-  // Initial load
   useEffect(() => {
     if (sessionId) {
       setLoading(true);
@@ -85,7 +87,7 @@ export function App() {
     }
   }, [sessionId, loadSessionData]);
 
-  // High-frequency Real-Time Polling Sync (Every 2 Seconds)
+  // Real-Time Polling Sync (Every 2 Seconds)
   useEffect(() => {
     if (!sessionId) return;
     const interval = setInterval(() => {
@@ -94,21 +96,29 @@ export function App() {
     return () => clearInterval(interval);
   }, [sessionId, loadSessionData]);
 
-  // Save current user's availability selections with instant re-fetch
   const handleSaveMySlots = async (
     slots: Array<{ startSlot: string; endSlot: string; isPreferred: boolean }>
   ) => {
     if (!sessionId || !currentName.trim()) return;
 
     try {
-      await saveParticipantAvailability(sessionId, currentName.trim(), slots);
-      await loadSessionData(); // Instant reload after saving
+      await saveParticipantAvailability(sessionId, currentName.trim(), slots, currentNote.trim());
+      await loadSessionData();
     } catch (err) {
       console.error('Failed saving availability:', err);
     }
   };
 
-  // Extract current user's selected slots mapping
+  const handleFinalizeSlot = async (slot: FinalizedSlot | null) => {
+    if (!sessionId) return;
+    try {
+      await setSessionFinalizedSlot(sessionId, slot);
+      await loadSessionData();
+    } catch (err) {
+      console.error('Failed finalizing slot:', err);
+    }
+  };
+
   const myParticipant = participants.find(
     p => p.name.trim().toLowerCase() === currentName.trim().toLowerCase()
   );
@@ -124,7 +134,6 @@ export function App() {
     return map;
   }, [myParticipant, availabilities]);
 
-  // Compute Heatmap and Best Slots
   const { heatmapMap, bestWindows } = React.useMemo(() => {
     if (!session) {
       return { heatmapMap: {}, bestWindows: [] };
@@ -132,39 +141,51 @@ export function App() {
 
     const { allSlots, slotsByDate } = generateSlotsForRange(session.dateRange);
     const heatmap = computeHeatmapGrid(allSlots, participants, availabilities);
-    const windows = findBestSlotWindows(slotsByDate, heatmap, participants.length, 60);
+    const windows = findBestSlotWindows(slotsByDate, heatmap, participants.length, selectedDuration);
 
     return { heatmapMap: heatmap, bestWindows: windows };
-  }, [session, participants, availabilities]);
+  }, [session, participants, availabilities, selectedDuration]);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans relative">
       <Navbar sessionTitle={session?.title} onNavigateHome={navigateToHome} />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto p-2 sm:p-4">
         {!sessionId ? (
           <CreateSession onSessionCreated={navigateToSession} />
         ) : loading ? (
-          <div className="flex flex-col items-center justify-center py-20 space-y-4">
-            <Loader2 className="w-10 h-10 text-teal-400 animate-spin" />
-            <p className="text-sm font-semibold text-slate-400">Loading session calendar...</p>
+          <div className="flex flex-col items-center justify-center py-16 space-y-3">
+            <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+            <p className="text-xs font-bold text-slate-500">Loading session calendar...</p>
           </div>
         ) : error || !session ? (
-          <div className="max-w-md mx-auto py-16 text-center space-y-4 bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl">
-            <AlertCircle className="w-12 h-12 text-rose-500 mx-auto" />
-            <h2 className="text-xl font-bold text-slate-100">Session Not Found</h2>
-            <p className="text-sm text-slate-400">{error || 'Invalid session link.'}</p>
+          <div className="max-w-md mx-auto py-12 text-center space-y-3 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+            <AlertCircle className="w-10 h-10 text-rose-500 mx-auto" />
+            <h2 className="text-lg font-bold text-slate-900">Session Not Found</h2>
+            <p className="text-xs text-slate-500">{error || 'Invalid session link.'}</p>
             <button
               onClick={navigateToHome}
-              className="bg-teal-500 text-slate-950 font-bold px-5 py-2.5 rounded-xl text-sm hover:bg-teal-400 transition-colors"
+              className="bg-indigo-600 text-white font-bold px-4 py-2 rounded-xl text-xs hover:bg-indigo-700 transition-colors"
             >
               Create New Session
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            {/* Left Column: Interactive Calendar Grid */}
-            <div className="lg:col-span-8 space-y-6">
+          <div className="space-y-3">
+            {/* Top Participant Bar & Active Roster */}
+            <ParticipantList
+              participants={participants}
+              availabilities={availabilities}
+              currentName={currentName}
+              currentNote={currentNote}
+              onNameChange={handleNameChange}
+              onNoteChange={handleNoteChange}
+              hoveredParticipantId={hoveredParticipantId}
+              onHoverParticipant={setHoveredParticipantId}
+            />
+
+            {/* Option B: Embedded Top Pick Card inside CalendarGrid */}
+            <div className="w-full">
               <CalendarGrid
                 dateRange={session.dateRange}
                 heatmapMap={heatmapMap}
@@ -173,24 +194,12 @@ export function App() {
                 mySelectedSlots={mySelectedSlots}
                 onSaveMySlots={handleSaveMySlots}
                 hoveredParticipantId={hoveredParticipantId}
-              />
-            </div>
-
-            {/* Right Column: Participant Roster & Best Slots Summary */}
-            <div className="lg:col-span-4 space-y-6">
-              <ParticipantList
-                participants={participants}
-                availabilities={availabilities}
-                currentName={currentName}
-                onNameChange={handleNameChange}
-                hoveredParticipantId={hoveredParticipantId}
-                onHoverParticipant={setHoveredParticipantId}
-              />
-
-              <ResultSummary
-                bestWindows={bestWindows}
-                totalParticipants={participants.length}
                 sessionTitle={session.title}
+                bestWindows={bestWindows}
+                selectedDuration={selectedDuration}
+                onDurationChange={setSelectedDuration}
+                finalizedSlot={session.finalizedSlot}
+                onFinalizeSlot={handleFinalizeSlot}
               />
             </div>
           </div>

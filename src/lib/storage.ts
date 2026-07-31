@@ -1,7 +1,7 @@
 import { db, isNeonConfigured } from '../db';
 import { sessions, participants, availabilities } from '../db/schema';
-import { eq, and } from 'drizzle-orm';
-import { Session, Participant, Availability, DateRangeConfig } from '../types';
+import { eq, inArray } from 'drizzle-orm';
+import { Session, Participant, Availability, DateRangeConfig, FinalizedSlot } from '../types';
 
 const LOCAL_STORAGE_PREFIX = 'syncmeet_demo_';
 
@@ -30,6 +30,7 @@ export async function createSession(title: string, dateRange: DateRangeConfig): 
     id,
     title,
     dateRange,
+    finalizedSlot: null,
     createdAt,
   };
 
@@ -39,6 +40,7 @@ export async function createSession(title: string, dateRange: DateRangeConfig): 
         id,
         title,
         dateRange,
+        finalizedSlot: null,
         createdAt: new Date(),
       });
       return newSession;
@@ -47,7 +49,6 @@ export async function createSession(title: string, dateRange: DateRangeConfig): 
     }
   }
 
-  // Fallback to localStorage
   const localSessions = getLocalData<Record<string, Session>>('sessions', {});
   localSessions[id] = newSession;
   setLocalData('sessions', localSessions);
@@ -64,6 +65,7 @@ export async function getSession(id: string): Promise<Session | null> {
           id: row.id,
           title: row.title,
           dateRange: row.dateRange,
+          finalizedSlot: row.finalizedSlot || null,
           createdAt: new Date(row.createdAt).toISOString(),
         };
       }
@@ -76,23 +78,69 @@ export async function getSession(id: string): Promise<Session | null> {
   return localSessions[id] || null;
 }
 
+export async function setSessionFinalizedSlot(
+  sessionId: string,
+  finalizedSlot: FinalizedSlot | null
+): Promise<void> {
+  if (isNeonConfigured && db) {
+    try {
+      await db
+        .update(sessions)
+        .set({ finalizedSlot })
+        .where(eq(sessions.id, sessionId));
+      return;
+    } catch (err) {
+      console.warn('Neon DB setFinalizedSlot failed, fallback to local:', err);
+    }
+  }
+
+  const localSessions = getLocalData<Record<string, Session>>('sessions', {});
+  if (localSessions[sessionId]) {
+    localSessions[sessionId].finalizedSlot = finalizedSlot;
+    setLocalData('sessions', localSessions);
+  }
+}
+
 export async function getSessionParticipants(sessionId: string): Promise<Participant[]> {
+  let rawParticipants: Participant[] = [];
+
   if (isNeonConfigured && db) {
     try {
       const res = await db.select().from(participants).where(eq(participants.sessionId, sessionId));
-      return res.map(r => ({
+      rawParticipants = res.map(r => ({
         id: r.id,
         sessionId: r.sessionId,
         name: r.name,
+        note: r.note || null,
         createdAt: new Date(r.createdAt).toISOString(),
       }));
     } catch (err) {
       console.warn('Neon DB getSessionParticipants failed, fallback to local:', err);
+      const localParticipants = getLocalData<Record<string, Participant>>('participants', {});
+      rawParticipants = Object.values(localParticipants).filter(p => p.sessionId === sessionId);
     }
+  } else {
+    const localParticipants = getLocalData<Record<string, Participant>>('participants', {});
+    rawParticipants = Object.values(localParticipants).filter(p => p.sessionId === sessionId);
   }
 
-  const localParticipants = getLocalData<Record<string, Participant>>('participants', {});
-  return Object.values(localParticipants).filter(p => p.sessionId === sessionId);
+  // Deduplicate participants strictly by normalized name string
+  const uniqueMap = new Map<string, Participant>();
+  rawParticipants.forEach(p => {
+    const norm = p.name.trim().toLowerCase();
+    if (!norm) return;
+    if (!uniqueMap.has(norm)) {
+      uniqueMap.set(norm, p);
+    } else {
+      // Keep note if existing is empty
+      const existing = uniqueMap.get(norm)!;
+      if (!existing.note && p.note) {
+        existing.note = p.note;
+      }
+    }
+  });
+
+  return Array.from(uniqueMap.values());
 }
 
 export async function getSessionAvailabilities(sessionId: string): Promise<{
@@ -135,38 +183,61 @@ export async function getSessionAvailabilities(sessionId: string): Promise<{
 export async function saveParticipantAvailability(
   sessionId: string,
   participantName: string,
-  selectedSlots: Array<{ startSlot: string; endSlot: string; isPreferred: boolean }>
+  selectedSlots: Array<{ startSlot: string; endSlot: string; isPreferred: boolean }>,
+  note?: string
 ): Promise<{ participant: Participant; availabilitiesCount: number }> {
-  // Check if participant already exists in this session by name
-  const existingPts = await getSessionParticipants(sessionId);
-  let participant = existingPts.find(p => p.name.trim().toLowerCase() === participantName.trim().toLowerCase());
-
-  const participantId = participant ? participant.id : crypto.randomUUID();
-
-  if (!participant) {
-    participant = {
-      id: participantId,
-      sessionId,
-      name: participantName.trim(),
-      createdAt: new Date().toISOString(),
-    };
+  const cleanName = participantName.trim();
+  if (!cleanName) {
+    throw new Error('Participant name cannot be empty');
   }
+
+  const normName = cleanName.toLowerCase();
+  const existingPts = await getSessionParticipants(sessionId);
+  
+  // Find any existing match by normalized name
+  const existingMatch = existingPts.find(p => p.name.trim().toLowerCase() === normName);
+
+  const participantId = existingMatch ? existingMatch.id : crypto.randomUUID();
+
+  const participant: Participant = {
+    id: participantId,
+    sessionId,
+    name: cleanName,
+    note: note !== undefined ? note : existingMatch?.note || null,
+    createdAt: existingMatch?.createdAt || new Date().toISOString(),
+  };
 
   if (isNeonConfigured && db) {
     try {
-      if (!existingPts.some(p => p.id === participantId)) {
+      // Fetch all DB records for this session with this name to clean up duplicates
+      const allDbPts = await db.select().from(participants).where(eq(participants.sessionId, sessionId));
+      const duplicates = allDbPts.filter(p => p.name.trim().toLowerCase() === normName);
+
+      if (duplicates.length === 0) {
         await db.insert(participants).values({
           id: participantId,
           sessionId,
-          name: participantName.trim(),
+          name: cleanName,
+          note: participant.note,
           createdAt: new Date(),
         });
+      } else {
+        // Update main record
+        await db
+          .update(participants)
+          .set({ name: cleanName, note: participant.note })
+          .where(eq(participants.id, participantId));
+
+        // Delete any extra duplicate participant IDs if they were created before
+        const extraDuplicateIds = duplicates.map(d => d.id).filter(id => id !== participantId);
+        if (extraDuplicateIds.length > 0) {
+          await db.delete(participants).where(inArray(participants.id, extraDuplicateIds));
+        }
       }
 
-      // Delete existing availabilities for participant to overwrite
+      // Overwrite availabilities for this participant
       await db.delete(availabilities).where(eq(availabilities.participantId, participantId));
 
-      // Insert new availabilities
       if (selectedSlots.length > 0) {
         await db.insert(availabilities).values(
           selectedSlots.map(s => ({
@@ -185,20 +256,26 @@ export async function saveParticipantAvailability(
     }
   }
 
-  // Local storage fallback
+  // Local storage fallback with strict deduplication
   const localPts = getLocalData<Record<string, Participant>>('participants', {});
+  
+  // Remove any duplicates with same normalized name
+  Object.keys(localPts).forEach(k => {
+    if (localPts[k].sessionId === sessionId && localPts[k].name.trim().toLowerCase() === normName) {
+      delete localPts[k];
+    }
+  });
+
   localPts[participantId] = participant;
   setLocalData('participants', localPts);
 
   const localAvails = getLocalData<Record<string, Availability>>('availabilities', {});
-  // remove existing for participant
   Object.keys(localAvails).forEach(k => {
     if (localAvails[k].participantId === participantId) {
       delete localAvails[k];
     }
   });
 
-  // add new
   selectedSlots.forEach(s => {
     const aId = crypto.randomUUID();
     localAvails[aId] = {

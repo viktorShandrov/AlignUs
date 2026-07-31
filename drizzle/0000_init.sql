@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS "sessions" (
   "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   "title" TEXT NOT NULL,
   "date_range" JSONB NOT NULL,
+  "finalized_slot" JSONB,
   "created_at" TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
 );
 
@@ -13,6 +14,7 @@ CREATE TABLE IF NOT EXISTS "participants" (
   "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   "session_id" UUID NOT NULL REFERENCES "sessions"("id") ON DELETE CASCADE,
   "name" TEXT NOT NULL,
+  "note" TEXT,
   "created_at" TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
 );
 

@@ -5,10 +5,19 @@ export interface DateRangeConfig {
   endTime: string;   // HH:mm (e.g. "20:00")
 }
 
+export interface FinalizedSlot {
+  startSlot: string; // ISO
+  endSlot: string;   // ISO
+  displayDate: string;
+  displayTime: string;
+  finalizedBy?: string;
+}
+
 export interface Session {
   id: string;
   title: string;
   dateRange: DateRangeConfig;
+  finalizedSlot?: FinalizedSlot | null;
   createdAt: string;
 }
 
@@ -16,28 +25,30 @@ export interface Participant {
   id: string;
   sessionId: string;
   name: string;
+  note?: string | null;
   createdAt: string;
 }
 
 export interface Availability {
   id: string;
   participantId: string;
-  startSlot: string; // ISO string timestamp
-  endSlot: string;   // ISO string timestamp
+  startSlot: string; // ISO
+  endSlot: string;   // ISO
   isPreferred: boolean;
 }
 
 export interface SlotParticipantInfo {
   participantId: string;
   name: string;
+  note?: string | null;
   isPreferred: boolean;
 }
 
 export interface HeatmapSlotData {
-  startSlot: string; // ISO timestamp
-  endSlot: string;   // ISO timestamp
-  timeLabel: string; // e.g. "09:30"
-  dateKey: string;   // e.g. "2026-08-01"
+  startSlot: string;
+  endSlot: string;
+  timeLabel: string;
+  dateKey: string;
   participants: SlotParticipantInfo[];
   totalScore: number;
   availableCount: number;

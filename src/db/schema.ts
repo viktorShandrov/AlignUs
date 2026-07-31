@@ -1,4 +1,5 @@
 import { pgTable, uuid, text, timestamp, boolean, jsonb } from 'drizzle-orm/pg-core';
+import { FinalizedSlot } from '../types';
 
 export const sessions = pgTable('sessions', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -9,6 +10,7 @@ export const sessions = pgTable('sessions', {
     startTime: string;
     endTime: string;
   }>().notNull(),
+  finalizedSlot: jsonb('finalized_slot').$type<FinalizedSlot>(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
@@ -16,6 +18,7 @@ export const participants = pgTable('participants', {
   id: uuid('id').defaultRandom().primaryKey(),
   sessionId: uuid('session_id').notNull().references(() => sessions.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
+  note: text('note'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
