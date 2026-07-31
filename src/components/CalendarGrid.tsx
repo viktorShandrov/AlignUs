@@ -3,7 +3,7 @@ import { DateRangeConfig, HeatmapSlotData, Participant, BestSlotWindow, Finalize
 import { generateSlotsForRange } from '../lib/dateUtils';
 import { getParticipantColor } from '../lib/colors';
 import { getGoogleCalendarUrl, downloadIcalFile } from '../lib/calendarExport';
-import { Star, Sparkles, Check, Eye, Edit3, Trash2, Zap, Award, Clock, Users, Lock, ExternalLink, Download, Layers, X, CheckCircle2, Copy } from 'lucide-react';
+import { Star, Sparkles, Check, Eye, Edit3, Trash2, Zap, Award, Clock, Users, Lock, ExternalLink, Download, Layers, X, CheckCircle2, Copy, Loader2, AlertCircle } from 'lucide-react';
 
 interface SelectedSlotState {
   isPreferred: boolean;
@@ -15,7 +15,7 @@ interface CalendarGridProps {
   participants: Participant[];
   currentParticipantName: string;
   mySelectedSlots: Record<string, SelectedSlotState>;
-  onSaveMySlots: (slots: Array<{ startSlot: string; endSlot: string; isPreferred: boolean }>) => void;
+  onSaveMySlots: (slots: Array<{ startSlot: string; endSlot: string; isPreferred: boolean }>) => Promise<void>;
   hoveredParticipantId?: string | null;
   sessionTitle: string;
   bestWindows: BestSlotWindow[];
@@ -44,7 +44,8 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   const [slotState, setSlotState] = useState<Record<string, SelectedSlotState>>(mySelectedSlots);
   const [isPreferredMode, setIsPreferredMode] = useState<boolean>(false);
   const [hoveredSlotKey, setHoveredSlotKey] = useState<string | null>(null);
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
@@ -60,16 +61,20 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
     return map;
   }, [participants]);
 
+  // Sync server selections only when not actively dragging or waiting on a pending save
   useEffect(() => {
-    setSlotState(mySelectedSlots);
-  }, [mySelectedSlots]);
+    if (saveStatus === 'idle' && !isDragging.current && !hasModifiedState.current) {
+      setSlotState(mySelectedSlots);
+    }
+  }, [mySelectedSlots, saveStatus]);
 
   const { dates, slotsByDate } = generateSlotsForRange(dateRange);
 
   const performSave = React.useCallback(
-    (currentState: Record<string, SelectedSlotState>) => {
+    async (currentState: Record<string, SelectedSlotState>) => {
       if (!currentParticipantName.trim()) return;
       setSaveStatus('saving');
+      setSaveError(null);
 
       const formattedSlots = Object.entries(currentState).map(([isoStart, state]) => {
         const endMs = new Date(isoStart).getTime() + 30 * 60 * 1000;
@@ -80,9 +85,17 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
         };
       });
 
-      onSaveMySlots(formattedSlots);
-      setSaveStatus('saved');
-      setTimeout(() => setSaveStatus('idle'), 2000);
+      try {
+        await onSaveMySlots(formattedSlots);
+        setSaveStatus('saved');
+        setTimeout(() => {
+          setSaveStatus(prev => (prev === 'saved' ? 'idle' : prev));
+        }, 2000);
+      } catch (err: any) {
+        console.error('Failed saving availability:', err);
+        setSaveStatus('error');
+        setSaveError(err?.message || 'Failed to save selections to server. Please try again.');
+      }
     },
     [currentParticipantName, onSaveMySlots]
   );
@@ -384,21 +397,34 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
 
           <div className="flex items-center space-x-2">
             {currentParticipantName.trim() ? (
-              <div className="flex items-center space-x-1 text-[11px] text-slate-600 font-bold px-2 py-0.5 rounded bg-white border border-slate-200">
+              <div className={`flex items-center space-x-1 text-[11px] font-bold px-2 py-0.5 rounded border transition-all ${
+                saveStatus === 'saving'
+                  ? 'bg-amber-50 text-amber-700 border-amber-200'
+                  : saveStatus === 'saved'
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : saveStatus === 'error'
+                  ? 'bg-rose-50 text-rose-700 border-rose-200'
+                  : 'bg-white text-slate-600 border-slate-200'
+              }`}>
                 {saveStatus === 'saving' ? (
                   <>
-                    <Zap className="w-3 h-3 text-amber-500 animate-bounce" />
-                    <span className="text-amber-700">Saving...</span>
+                    <Loader2 className="w-3 h-3 text-amber-600 animate-spin" />
+                    <span>Syncing...</span>
                   </>
                 ) : saveStatus === 'saved' ? (
                   <>
                     <Check className="w-3 h-3 text-emerald-600 stroke-[3]" />
-                    <span className="text-emerald-700">Auto-saved ✓</span>
+                    <span>Auto-saved ✓</span>
+                  </>
+                ) : saveStatus === 'error' ? (
+                  <>
+                    <AlertCircle className="w-3 h-3 text-rose-600" />
+                    <span>Save failed</span>
                   </>
                 ) : (
                   <>
                     <Zap className="w-3 h-3 text-indigo-600" />
-                    <span className="text-slate-500">Drag to save</span>
+                    <span className="text-slate-500">Drag to select</span>
                   </>
                 )}
               </div>
@@ -416,6 +442,22 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
               <span>Clear</span>
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Save Error Banner with Retry */}
+      {saveStatus === 'error' && saveError && (
+        <div className="bg-rose-50 border border-rose-200 rounded-lg p-2.5 flex items-center justify-between text-xs text-rose-800 animate-fade-in shadow-2xs">
+          <div className="flex items-center space-x-2">
+            <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
+            <span className="font-semibold">{saveError}</span>
+          </div>
+          <button
+            onClick={() => performSave(slotState)}
+            className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-2.5 py-1 rounded-md text-[11px] transition-colors shadow-2xs"
+          >
+            Retry Save
+          </button>
         </div>
       )}
 

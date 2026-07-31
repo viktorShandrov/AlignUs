@@ -109,6 +109,7 @@ export function App() {
       await loadSessionData();
     } catch (err) {
       console.error('Failed saving availability:', err);
+      throw err;
     }
   };
 
