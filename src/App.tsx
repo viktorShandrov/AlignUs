@@ -42,11 +42,9 @@ export function App() {
     return localStorage.getItem('syncmeet_my_name') || '';
   });
 
-  const [currentNote, setCurrentNote] = useState<string>(() => {
-    return localStorage.getItem('syncmeet_my_note') || '';
-  });
-
   const [hoveredParticipantId, setHoveredParticipantId] = useState<string | null>(null);
+
+  const lastSaveTime = React.useRef<number>(0);
 
   // Track page views on route/path changes
   useEffect(() => {
@@ -56,11 +54,6 @@ export function App() {
   const handleNameChange = (name: string) => {
     setCurrentName(name);
     localStorage.setItem('syncmeet_my_name', name);
-  };
-
-  const handleNoteChange = (note: string) => {
-    setCurrentNote(note);
-    localStorage.setItem('syncmeet_my_note', note);
   };
 
   const handleSaveModalName = (name: string) => {
@@ -88,27 +81,41 @@ export function App() {
     window.history.pushState({}, '', '/dashboard');
   };
 
+  const myParticipant = participants.find(
+    p => (p.userId && p.userId === userId) || (!p.userId && currentName.trim() && p.name.trim().toLowerCase() === currentName.trim().toLowerCase())
+  );
+
   const loadSessionData = useCallback(async () => {
     if (!sessionId || isDashboard) return;
+    const fetchTime = Date.now();
     try {
       const s = await getSession(sessionId);
       if (!s) {
         setError('Session not found or link has expired.');
         return;
       }
-      setSession(s);
+      setSession(prev => (JSON.stringify(prev) === JSON.stringify(s) ? prev : s));
       setError(null);
 
       const { participants: pts, availabilities: avs } = await getSessionAvailabilities(sessionId);
-      setParticipants(pts);
-      setAvailabilities(avs);
+      setParticipants(prevPts => (JSON.stringify(prevPts) === JSON.stringify(pts) ? prevPts : pts));
+
+      setAvailabilities(prevAvs => {
+        if (fetchTime < lastSaveTime.current && myParticipant) {
+          const myPtId = myParticipant.id;
+          const myLocalAvails = prevAvs.filter(a => a.participantId === myPtId);
+          const serverOthersAvails = avs.filter(a => a.participantId !== myPtId);
+          return [...serverOthersAvails, ...myLocalAvails];
+        }
+        return JSON.stringify(prevAvs) === JSON.stringify(avs) ? prevAvs : avs;
+      });
     } catch (err) {
       console.error('Error fetching session:', err);
       setError('Failed to load session data.');
     } finally {
       setLoading(false);
     }
-  }, [sessionId, isDashboard]);
+  }, [sessionId, isDashboard, myParticipant]);
 
   useEffect(() => {
     if (sessionId && !isDashboard) {
@@ -138,11 +145,39 @@ export function App() {
   ) => {
     if (!sessionId || !currentName.trim()) return;
 
+    lastSaveTime.current = Date.now();
+
+    // Optimistic update of local availabilities state in App.tsx
+    const myPtId = myParticipant?.id;
+    if (myPtId) {
+      const newMyAvails: Availability[] = slots.map(s => ({
+        id: crypto.randomUUID(),
+        participantId: myPtId,
+        startSlot: s.startSlot,
+        endSlot: s.endSlot,
+        isPreferred: s.isPreferred,
+      }));
+
+      setAvailabilities(prevAvails => {
+        const others = prevAvails.filter(a => a.participantId !== myPtId);
+        return [...others, ...newMyAvails];
+      });
+    }
+
     try {
-      await saveParticipantAvailability(sessionId, userId, currentName.trim(), slots, currentNote.trim());
-      await loadSessionData();
+      const result = await saveParticipantAvailability(sessionId, userId, currentName.trim(), slots);
+      if (result.participant) {
+        setParticipants(prev => {
+          const exists = prev.some(p => p.id === result.participant.id);
+          if (exists) {
+            return prev.map(p => (p.id === result.participant.id ? result.participant : p));
+          }
+          return [...prev, result.participant];
+        });
+      }
     } catch (err) {
       console.error('Failed saving availability:', err);
+      await loadSessionData();
       throw err;
     }
   };
@@ -156,10 +191,6 @@ export function App() {
       console.error('Failed finalizing slot:', err);
     }
   };
-
-  const myParticipant = participants.find(
-    p => (p.userId && p.userId === userId) || (!p.userId && currentName.trim() && p.name.trim().toLowerCase() === currentName.trim().toLowerCase())
-  );
 
   const mySelectedSlots = React.useMemo(() => {
     if (!myParticipant) return {};
@@ -222,10 +253,8 @@ export function App() {
               participants={participants}
               availabilities={availabilities}
               currentName={currentName}
-              currentNote={currentNote}
               currentUserId={userId}
               onNameChange={handleNameChange}
-              onNoteChange={handleNoteChange}
               onOpenNameModal={() => setIsNameModalOpen(true)}
               hoveredParticipantId={hoveredParticipantId}
               onHoverParticipant={setHoveredParticipantId}

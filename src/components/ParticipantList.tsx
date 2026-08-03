@@ -1,16 +1,14 @@
 import React from 'react';
 import { Participant, Availability } from '../types';
-import { Users, UserCheck, Star, UserPlus, MessageSquare, Edit3 } from 'lucide-react';
+import { Users, UserCheck, Star, UserPlus, Edit3 } from 'lucide-react';
 import { getParticipantColor } from '../lib/colors';
 
 interface ParticipantListProps {
   participants: Participant[];
   availabilities: Availability[];
   currentName: string;
-  currentNote: string;
   currentUserId?: string;
   onNameChange: (name: string) => void;
-  onNoteChange: (note: string) => void;
   onOpenNameModal?: () => void;
   hoveredParticipantId?: string | null;
   onHoverParticipant?: (id: string | null) => void;
@@ -20,10 +18,8 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
   participants,
   availabilities,
   currentName,
-  currentNote,
   currentUserId,
   onNameChange,
-  onNoteChange,
   onOpenNameModal,
   hoveredParticipantId,
   onHoverParticipant,
@@ -42,8 +38,8 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
 
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-2xs space-y-3">
-      {/* Participant Identity & Quick Note Form */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pb-2.5 border-b border-slate-100">
+      {/* Participant Identity Bar */}
+      <div className="pb-2.5 border-b border-slate-100">
         <div className="space-y-1">
           <label className="text-[11px] font-bold text-slate-800 flex items-center justify-between">
             <span className="flex items-center gap-1">
@@ -52,7 +48,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
             </span>
           </label>
 
-          <div className="flex items-center space-x-2 bg-slate-50 border border-slate-200 rounded-lg p-1.5 shadow-2xs">
+          <div className="flex items-center space-x-2 bg-slate-50 border border-slate-200 rounded-lg p-1.5 shadow-2xs max-w-md">
             {currentName.trim() ? (
               <>
                 <div className="w-6 h-6 rounded-md bg-indigo-600 text-white font-black text-xs flex items-center justify-center flex-shrink-0">
@@ -81,20 +77,6 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
               </button>
             )}
           </div>
-        </div>
-
-        <div className="space-y-1">
-          <label className="text-[11px] font-bold text-slate-800 flex items-center gap-1">
-            <MessageSquare className="w-3.5 h-3.5 text-indigo-600" />
-            <span>Бележка / Note (Optional)</span>
-          </label>
-          <input
-            type="text"
-            value={currentNote}
-            onChange={e => onNoteChange(e.target.value)}
-            placeholder="напр. Само онлайн, Излизам по-рано..."
-            className="w-full bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:bg-white text-slate-800 placeholder-slate-400 rounded-lg px-2.5 py-1.5 text-xs outline-none shadow-2xs font-medium"
-          />
         </div>
       </div>
 
@@ -149,11 +131,6 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
                       Вие
                     </span>
                   )}
-                  {p.note && (
-                    <span className="text-[10px] text-indigo-700 font-medium truncate max-w-[120px]">
-                      ("{p.note}")
-                    </span>
-                  )}
                   <span className="text-[10px] text-slate-400">({stat.total}s)</span>
                   {stat.preferred > 0 && (
                     <span className="flex items-center text-[9px] font-bold text-amber-600">
@@ -170,3 +147,4 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
     </div>
   );
 };
+

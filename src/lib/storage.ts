@@ -1,6 +1,6 @@
 import { db, isNeonConfigured } from '../db';
 import { sessions, participants, availabilities } from '../db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { Session, Participant, Availability, DateRangeConfig, FinalizedSlot } from '../types';
 import { trackEvent } from './analytics';
 
@@ -115,7 +115,7 @@ export async function getSessionParticipants(sessionId: string): Promise<Partici
         sessionId: r.sessionId,
         userId: r.userId || null,
         name: r.name,
-        note: r.note || null,
+        note: null,
         createdAt: new Date(r.createdAt).toISOString(),
       }));
     } catch (err) {
@@ -160,18 +160,16 @@ export async function getSessionAvailabilities(sessionId: string): Promise<{
   if (isNeonConfigured && db) {
     try {
       const allAvails: Availability[] = [];
-      for (const pId of ptIds) {
-        const res = await db.select().from(availabilities).where(eq(availabilities.participantId, pId));
-        res.forEach(a => {
-          allAvails.push({
-            id: a.id,
-            participantId: a.participantId,
-            startSlot: new Date(a.startSlot).toISOString(),
-            endSlot: new Date(a.endSlot).toISOString(),
-            isPreferred: a.isPreferred,
-          });
+      const res = await db.select().from(availabilities).where(inArray(availabilities.participantId, ptIds));
+      res.forEach(a => {
+        allAvails.push({
+          id: a.id,
+          participantId: a.participantId,
+          startSlot: new Date(a.startSlot).toISOString(),
+          endSlot: new Date(a.endSlot).toISOString(),
+          isPreferred: a.isPreferred,
         });
-      }
+      });
       return { participants: pts, availabilities: allAvails };
     } catch (err) {
       console.warn('Neon DB getAvailabilities failed, fallback to local:', err);
@@ -187,8 +185,7 @@ export async function saveParticipantAvailability(
   sessionId: string,
   userId: string,
   participantName: string,
-  selectedSlots: Array<{ startSlot: string; endSlot: string; isPreferred: boolean }>,
-  note?: string
+  selectedSlots: Array<{ startSlot: string; endSlot: string; isPreferred: boolean }>
 ): Promise<{ participant: Participant; availabilitiesCount: number }> {
   const cleanName = participantName.trim();
   if (!cleanName) {
@@ -226,7 +223,7 @@ export async function saveParticipantAvailability(
     sessionId,
     userId,
     name: cleanName,
-    note: note !== undefined ? note : existingMatch?.note || null,
+    note: null,
     createdAt: existingMatch?.createdAt || new Date().toISOString(),
   };
 
@@ -244,13 +241,12 @@ export async function saveParticipantAvailability(
           sessionId,
           userId,
           name: cleanName,
-          note: participant.note,
           createdAt: new Date(),
         });
       } else {
         await db
           .update(participants)
-          .set({ userId, name: cleanName, note: participant.note })
+          .set({ userId, name: cleanName })
           .where(eq(participants.id, participantId));
       }
 

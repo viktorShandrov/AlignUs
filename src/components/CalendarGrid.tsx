@@ -63,12 +63,12 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
     return map;
   }, [participants]);
 
-  // Sync server selections only when not actively dragging or waiting on a pending save
+  // Sync server selections only when not actively dragging or holding un-saved edits
   useEffect(() => {
-    if (saveStatus === 'idle' && !isDragging.current && !hasModifiedState.current) {
+    if (!isDragging.current && !hasModifiedState.current) {
       setSlotState(mySelectedSlots);
     }
-  }, [mySelectedSlots, saveStatus]);
+  }, [mySelectedSlots]);
 
   const { dates, slotsByDate } = generateSlotsForRange(dateRange);
 
@@ -94,10 +94,11 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
 
       try {
         await onSaveMySlots(formattedSlots);
+        hasModifiedState.current = false;
         setSaveStatus('saved');
         setTimeout(() => {
           setSaveStatus(prev => (prev === 'saved' ? 'idle' : prev));
-        }, 2000);
+        }, 1000);
       } catch (err: any) {
         console.error('Failed saving availability:', err);
         setSaveStatus('error');
