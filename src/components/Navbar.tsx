@@ -29,7 +29,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
           <div className="flex items-center space-x-2">
             <span className="font-black text-base tracking-tight text-slate-900">
-              Sync<span className="text-indigo-600">Meet</span>
+              Align<span className="text-indigo-600">Us</span>
             </span>
             {sessionTitle && (
               <>
