@@ -2,6 +2,7 @@ import { db, isNeonConfigured } from '../db';
 import { sessions, participants, availabilities } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { Session, Participant, Availability, DateRangeConfig, FinalizedSlot } from '../types';
+import { trackEvent } from './analytics';
 
 const LOCAL_STORAGE_PREFIX = 'syncmeet_demo_';
 
@@ -52,6 +53,7 @@ export async function createSession(title: string, dateRange: DateRangeConfig): 
   const localSessions = getLocalData<Record<string, Session>>('sessions', {});
   localSessions[id] = newSession;
   setLocalData('sessions', localSessions);
+  trackEvent('session_created', `/session/${id}`, { title, id });
   return newSession;
 }
 
@@ -99,6 +101,7 @@ export async function setSessionFinalizedSlot(
     localSessions[sessionId].finalizedSlot = finalizedSlot;
     setLocalData('sessions', localSessions);
   }
+  trackEvent('slot_finalized', `/session/${sessionId}`, { sessionId, finalizedSlot });
 }
 
 export async function getSessionParticipants(sessionId: string): Promise<Participant[]> {
@@ -300,6 +303,12 @@ export async function saveParticipantAvailability(
     };
   });
   setLocalData('availabilities', localAvails);
+
+  trackEvent('availability_saved', `/session/${sessionId}`, {
+    sessionId,
+    participantName: cleanName,
+    slotsCount: selectedSlots.length,
+  });
 
   return { participant, availabilitiesCount: selectedSlots.length };
 }

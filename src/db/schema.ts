@@ -30,3 +30,12 @@ export const availabilities = pgTable('availabilities', {
   endSlot: timestamp('end_slot', { withTimezone: true }).notNull(),
   isPreferred: boolean('is_preferred').default(false).notNull(),
 });
+
+export const analyticsEvents = pgTable('analytics_events', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  eventType: text('event_type').notNull(), // 'page_view' | 'session_created' | 'availability_saved' | 'slot_finalized'
+  path: text('path').notNull(),
+  metadata: jsonb('metadata'),
+  timestamp: timestamp('timestamp', { withTimezone: true }).defaultNow().notNull(),
+});
+

@@ -4,15 +4,21 @@ import { CreateSession } from './components/CreateSession';
 import { CalendarGrid } from './components/CalendarGrid';
 import { ParticipantList } from './components/ParticipantList';
 import { NameModal } from './components/NameModal';
+import { Dashboard } from './components/Dashboard';
 import { Session, Participant, Availability, FinalizedSlot } from './types';
 import { getSession, getSessionAvailabilities, saveParticipantAvailability, setSessionFinalizedSlot } from './lib/storage';
 import { generateSlotsForRange } from './lib/dateUtils';
 import { computeHeatmapGrid, findBestSlotWindows } from './lib/heatmap';
 import { getOrCreateUserId } from './lib/user';
+import { trackPageView } from './lib/analytics';
 import { Loader2, AlertCircle } from 'lucide-react';
 
 export function App() {
   const [userId] = useState<string>(() => getOrCreateUserId());
+
+  const [currentPath, setCurrentPath] = useState<string>(() => window.location.pathname);
+
+  const isDashboard = currentPath.startsWith('/dashboard') || currentPath.startsWith('/stats');
 
   const [sessionId, setSessionId] = useState<string | null>(() => {
     const path = window.location.pathname;
@@ -27,7 +33,7 @@ export function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [availabilities, setAvailabilities] = useState<Availability[]>([]);
-  const [loading, setLoading] = useState<boolean>(Boolean(sessionId));
+  const [loading, setLoading] = useState<boolean>(Boolean(sessionId && !isDashboard));
   const [error, setError] = useState<string | null>(null);
   const [selectedDuration, setSelectedDuration] = useState<number>(60); // Default 1 hour
   const [isNameModalOpen, setIsNameModalOpen] = useState<boolean>(false);
@@ -41,6 +47,11 @@ export function App() {
   });
 
   const [hoveredParticipantId, setHoveredParticipantId] = useState<string | null>(null);
+
+  // Track page views on route/path changes
+  useEffect(() => {
+    trackPageView(currentPath);
+  }, [currentPath]);
 
   const handleNameChange = (name: string) => {
     setCurrentName(name);
@@ -59,17 +70,26 @@ export function App() {
 
   const navigateToSession = (id: string) => {
     setSessionId(id);
+    setCurrentPath(`/session/${id}`);
     window.history.pushState({}, '', `/session/${id}`);
   };
 
   const navigateToHome = () => {
     setSessionId(null);
     setSession(null);
+    setCurrentPath('/');
     window.history.pushState({}, '', '/');
   };
 
+  const navigateToDashboard = () => {
+    setSessionId(null);
+    setSession(null);
+    setCurrentPath('/dashboard');
+    window.history.pushState({}, '', '/dashboard');
+  };
+
   const loadSessionData = useCallback(async () => {
-    if (!sessionId) return;
+    if (!sessionId || isDashboard) return;
     try {
       const s = await getSession(sessionId);
       if (!s) {
@@ -88,30 +108,30 @@ export function App() {
     } finally {
       setLoading(false);
     }
-  }, [sessionId]);
+  }, [sessionId, isDashboard]);
 
   useEffect(() => {
-    if (sessionId) {
+    if (sessionId && !isDashboard) {
       setLoading(true);
       loadSessionData();
     }
-  }, [sessionId, loadSessionData]);
+  }, [sessionId, isDashboard, loadSessionData]);
 
   // Real-Time Polling Sync (Every 2 Seconds)
   useEffect(() => {
-    if (!sessionId) return;
+    if (!sessionId || isDashboard) return;
     const interval = setInterval(() => {
       loadSessionData();
     }, 2000);
     return () => clearInterval(interval);
-  }, [sessionId, loadSessionData]);
+  }, [sessionId, isDashboard, loadSessionData]);
 
   // Automatically prompt first-time user for name if not set
   useEffect(() => {
-    if (sessionId && !loading && session && !currentName.trim()) {
+    if (sessionId && !loading && session && !currentName.trim() && !isDashboard) {
       setIsNameModalOpen(true);
     }
-  }, [sessionId, loading, session, currentName]);
+  }, [sessionId, loading, session, currentName, isDashboard]);
 
   const handleSaveMySlots = async (
     slots: Array<{ startSlot: string; endSlot: string; isPreferred: boolean }>
@@ -166,10 +186,17 @@ export function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans relative">
-      <Navbar sessionTitle={session?.title} onNavigateHome={navigateToHome} />
+      <Navbar
+        sessionTitle={session?.title}
+        onNavigateHome={navigateToHome}
+        onNavigateDashboard={navigateToDashboard}
+        isDashboardActive={isDashboard}
+      />
 
       <main className="flex-1 max-w-7xl w-full mx-auto p-2 sm:p-4">
-        {!sessionId ? (
+        {isDashboard ? (
+          <Dashboard onNavigateHome={navigateToHome} />
+        ) : !sessionId ? (
           <CreateSession onSessionCreated={navigateToSession} />
         ) : loading ? (
           <div className="flex flex-col items-center justify-center py-16 space-y-3">
@@ -240,3 +267,4 @@ export function App() {
 }
 
 export default App;
+
