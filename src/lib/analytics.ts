@@ -139,18 +139,26 @@ export function seedDemoAnalyticsData(): AnalyticsEvent[] {
   // Generate realistic traffic history over the last 7 days
   const titles = ['Team Sync Q3', 'Project Kickoff', 'Design Review', 'Sprint Planning', 'Client Demo'];
   const names = ['Alex', 'Elena', 'Maria', 'Stefan', 'Nikolay', 'Ivan', 'Gergana'];
+  const demoUsers = [
+    'usr_alex_89', 'usr_elena_12', 'usr_maria_44', 'usr_stefan_07',
+    'usr_nikolay_99', 'usr_ivan_31', 'usr_gergana_55', 'usr_peter_18',
+    'usr_kaloyan_22', 'usr_teodora_63', 'usr_boris_71', 'usr_desislava_88',
+    'usr_viktoria_05', 'usr_martin_42', 'usr_simona_90'
+  ];
 
   for (let i = 0; i < 45; i++) {
     const timeOffset = Math.random() * (7 * DAY);
     const ts = new Date(now - timeOffset).toISOString();
-    
-    // Page views
+    const userId = demoUsers[i % demoUsers.length];
+    const sessionPath = '/session/' + crypto.randomUUID().slice(0, 8);
+
+    // Page views (Direct shared links to sessions)
     events.push({
       id: crypto.randomUUID(),
       eventType: 'page_view',
-      path: Math.random() > 0.3 ? '/session/' + crypto.randomUUID().slice(0, 8) : '/',
+      path: sessionPath,
       timestamp: ts,
-      metadata: { referrer: Math.random() > 0.5 ? 'direct' : 'google' },
+      metadata: { userId, referrer: 'direct', isDirectShare: true },
     });
 
     // Session creations
@@ -160,7 +168,7 @@ export function seedDemoAnalyticsData(): AnalyticsEvent[] {
         eventType: 'session_created',
         path: '/',
         timestamp: new Date(new Date(ts).getTime() + 1000).toISOString(),
-        metadata: { title: titles[i % titles.length] },
+        metadata: { userId, title: titles[i % titles.length] },
       });
     }
 
@@ -169,9 +177,9 @@ export function seedDemoAnalyticsData(): AnalyticsEvent[] {
       events.push({
         id: crypto.randomUUID(),
         eventType: 'availability_saved',
-        path: '/session/' + crypto.randomUUID().slice(0, 8),
+        path: sessionPath,
         timestamp: new Date(new Date(ts).getTime() + 5000).toISOString(),
-        metadata: { participantName: names[i % names.length], slotsCount: Math.floor(Math.random() * 8) + 2 },
+        metadata: { userId, participantName: names[i % names.length], slotsCount: Math.floor(Math.random() * 8) + 2 },
       });
     }
 
@@ -180,9 +188,9 @@ export function seedDemoAnalyticsData(): AnalyticsEvent[] {
       events.push({
         id: crypto.randomUUID(),
         eventType: 'slot_finalized',
-        path: '/session/' + crypto.randomUUID().slice(0, 8),
+        path: sessionPath,
         timestamp: new Date(new Date(ts).getTime() + 12000).toISOString(),
-        metadata: { sessionTitle: titles[i % titles.length] },
+        metadata: { userId, sessionTitle: titles[i % titles.length] },
       });
     }
   }

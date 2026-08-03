@@ -140,23 +140,44 @@ export function Dashboard({ onNavigateHome }: DashboardProps) {
     const availabilitySaved = filteredEvents.filter(e => e.eventType === 'availability_saved').length;
     const slotFinalized = filteredEvents.filter(e => e.eventType === 'slot_finalized').length;
 
+    // Calculate count of unique individual users (without duplicates)
+    const userSet = new Set<string>();
+    filteredEvents.forEach(e => {
+      const uId = e.metadata?.userId || e.metadata?.participantName;
+      if (uId && typeof uId === 'string' && uId.trim()) {
+        userSet.add(uId.trim().toLowerCase());
+      }
+    });
+    const uniqueUsers = userSet.size;
+
     const finalizationRate = sessionsCreated > 0 ? Math.min(100, Math.round((slotFinalized / sessionsCreated) * 100)) : 0;
 
     return {
       pageViews,
       sessionsCreated,
       availabilitySaved,
+      uniqueUsers,
       slotFinalized,
       finalizationRate,
     };
   }, [filteredEvents, deduplicatedPageViews]);
 
-  // Live Activity Feed Filtered
+  // Live Activity Feed Filtered (Restricted to only 3 specified event types)
   const liveFeedEvents = useMemo(() => {
-    if (feedFilter === 'all') return filteredEvents;
-    if (feedFilter === 'page_view') return deduplicatedPageViews;
-    return filteredEvents.filter(e => e.eventType === feedFilter);
-  }, [filteredEvents, feedFilter, deduplicatedPageViews]);
+    const allowed = filteredEvents.filter(e => {
+      if (e.eventType === 'slot_finalized') return true;
+      if (e.eventType === 'session_created') return true;
+      if (e.eventType === 'page_view') {
+        return e.path.startsWith('/session/') || e.metadata?.referrer === 'direct' || e.metadata?.isDirectShare === true;
+      }
+      return false;
+    });
+
+    if (feedFilter === 'slot_finalized') return allowed.filter(e => e.eventType === 'slot_finalized');
+    if (feedFilter === 'session_created') return allowed.filter(e => e.eventType === 'session_created');
+    if (feedFilter === 'direct_link') return allowed.filter(e => e.eventType === 'page_view');
+    return allowed;
+  }, [filteredEvents, feedFilter]);
 
   // Distribution & Activity Over Time Calculation
   const timeChartData = useMemo(() => {
@@ -225,13 +246,13 @@ export function Dashboard({ onNavigateHome }: DashboardProps) {
   const getEventBadge = (type: AnalyticsEventType) => {
     switch (type) {
       case 'page_view':
-        return { label: 'Посещение', color: 'bg-blue-50 text-blue-700 border-blue-200', icon: Eye };
+        return { label: 'Директна връзка', color: 'bg-blue-50 text-blue-700 border-blue-200', icon: Eye };
       case 'session_created':
-        return { label: 'Нова Сесия', color: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: Calendar };
-      case 'availability_saved':
-        return { label: 'Отговор от Участник', color: 'bg-purple-50 text-purple-700 border-purple-200', icon: Users };
+        return { label: 'Нова сесия', color: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: Calendar };
       case 'slot_finalized':
-        return { label: 'Финализиран Час', color: 'bg-amber-50 text-amber-700 border-amber-200', icon: CheckCircle2 };
+        return { label: 'Финализирана среща', color: 'bg-amber-50 text-amber-700 border-amber-200', icon: CheckCircle2 };
+      default:
+        return { label: 'Събитие', color: 'bg-slate-50 text-slate-700 border-slate-200', icon: Activity };
     }
   };
 
@@ -356,21 +377,21 @@ export function Dashboard({ onNavigateHome }: DashboardProps) {
           <p className="mt-1 text-xs text-slate-500">Планирания, започнати от организатори</p>
         </div>
 
-        {/* Card 3: Participant Responses */}
+        {/* Card 3: Unique Users Count */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Активни Участници</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">БРОЙ ПОТРЕБИТЕЛИ</span>
             <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
               <Users className="w-5 h-5" />
             </div>
           </div>
           <div className="mt-4 flex items-baseline gap-2">
-            <span className="text-3xl font-black text-slate-900">{kpis.availabilitySaved}</span>
-            <span className="text-xs text-purple-600 font-bold flex items-center">
-              <Zap className="w-3.5 h-3.5" /> Отговори
+            <span className="text-3xl font-black text-slate-900">{kpis.uniqueUsers}</span>
+            <span className="text-xs text-purple-600 font-bold flex items-center gap-1">
+              <Zap className="w-3.5 h-3.5" /> Потребители
             </span>
           </div>
-          <p className="mt-1 text-xs text-slate-500">Записани наличности от потребители</p>
+          <p className="mt-1 text-xs text-slate-500">Сбор от всички участвали индивидуални юзъри (без повторения)</p>
         </div>
 
         {/* Card 4: Finalization Rate */}
@@ -418,20 +439,28 @@ export function Dashboard({ onNavigateHome }: DashboardProps) {
                 Всички
               </button>
               <button
-                onClick={() => setFeedFilter('page_view')}
+                onClick={() => setFeedFilter('slot_finalized')}
                 className={`px-2.5 py-1 rounded-lg transition-colors ${
-                  feedFilter === 'page_view' ? 'bg-white font-bold text-slate-900 shadow-sm' : 'hover:text-slate-900'
+                  feedFilter === 'slot_finalized' ? 'bg-white font-bold text-slate-900 shadow-sm' : 'hover:text-slate-900'
                 }`}
               >
-                Посещения
+                Финализирани
               </button>
               <button
-                onClick={() => setFeedFilter('availability_saved')}
+                onClick={() => setFeedFilter('session_created')}
                 className={`px-2.5 py-1 rounded-lg transition-colors ${
-                  feedFilter === 'availability_saved' ? 'bg-white font-bold text-slate-900 shadow-sm' : 'hover:text-slate-900'
+                  feedFilter === 'session_created' ? 'bg-white font-bold text-slate-900 shadow-sm' : 'hover:text-slate-900'
                 }`}
               >
-                Участници
+                Нови сесии
+              </button>
+              <button
+                onClick={() => setFeedFilter('direct_link')}
+                className={`px-2.5 py-1 rounded-lg transition-colors ${
+                  feedFilter === 'direct_link' ? 'bg-white font-bold text-slate-900 shadow-sm' : 'hover:text-slate-900'
+                }`}
+              >
+                Директни връзки
               </button>
             </div>
           </div>
@@ -468,16 +497,11 @@ export function Dashboard({ onNavigateHome }: DashboardProps) {
                           {event.eventType === 'session_created' && (
                             <>Създадена бе нова сесия &quot;{event.metadata?.title || 'Без име'}&quot;</>
                           )}
-                          {event.eventType === 'availability_saved' && (
-                            <>
-                              Участник <strong className="text-indigo-600">{event.metadata?.participantName || 'Гост'}</strong> добави {event.metadata?.slotsCount || 'няколко'} свободни часа
-                            </>
-                          )}
                           {event.eventType === 'slot_finalized' && (
-                            <>Финализиран бе окончателен час за среща!</>
+                            <>Финализирана бе среща &quot;{event.metadata?.sessionTitle || event.metadata?.title || 'Окончателен час'}&quot;</>
                           )}
                           {event.eventType === 'page_view' && (
-                            <>Посещение от {event.metadata?.referrer === 'google' ? 'Google Search' : 'Директна връзка'}</>
+                            <>Посещение от директна шерната връзка</>
                           )}
                         </p>
                       </div>
