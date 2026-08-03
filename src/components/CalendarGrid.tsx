@@ -143,9 +143,32 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
     });
   };
 
+  const isTouchInteraction = useRef<boolean>(false);
+  const slotStateRef = useRef(slotState);
+
+  useEffect(() => {
+    slotStateRef.current = slotState;
+  }, [slotState]);
+
+  const finishInteractionAndSave = React.useCallback(() => {
+    if (isDragging.current && hasModifiedState.current) {
+      isDragging.current = false;
+      hasModifiedState.current = false;
+      performSave(slotStateRef.current);
+    } else {
+      isDragging.current = false;
+      hasModifiedState.current = false;
+    }
+
+    setTimeout(() => {
+      isTouchInteraction.current = false;
+    }, 300);
+  }, [performSave]);
+
   // Touch Gesture Handling for Mobile Devices
   const handleTouchStart = (isoStart: string, e: React.TouchEvent) => {
     if (viewMode !== 'edit') return;
+    isTouchInteraction.current = true;
     activeTouchSlot.current = isoStart;
     handleMouseDown(isoStart);
   };
@@ -170,39 +193,23 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
 
   const handleTouchEnd = () => {
     activeTouchSlot.current = null;
-    if (isDragging.current && hasModifiedState.current) {
-      isDragging.current = false;
-      hasModifiedState.current = false;
-
-      setSlotState(latest => {
-        performSave(latest);
-        return latest;
-      });
-    } else {
-      isDragging.current = false;
-      hasModifiedState.current = false;
-    }
+    finishInteractionAndSave();
   };
 
   useEffect(() => {
-    const handleGlobalMouseUp = () => {
-      if (isDragging.current && hasModifiedState.current) {
-        isDragging.current = false;
-        hasModifiedState.current = false;
-
-        setSlotState(latest => {
-          performSave(latest);
-          return latest;
-        });
-      } else {
-        isDragging.current = false;
-        hasModifiedState.current = false;
-      }
+    const handleGlobalEnd = () => {
+      finishInteractionAndSave();
     };
 
-    window.addEventListener('mouseup', handleGlobalMouseUp);
-    return () => window.removeEventListener('mouseup', handleGlobalMouseUp);
-  }, [performSave]);
+    window.addEventListener('mouseup', handleGlobalEnd);
+    window.addEventListener('touchend', handleGlobalEnd);
+    window.addEventListener('touchcancel', handleGlobalEnd);
+    return () => {
+      window.removeEventListener('mouseup', handleGlobalEnd);
+      window.removeEventListener('touchend', handleGlobalEnd);
+      window.removeEventListener('touchcancel', handleGlobalEnd);
+    };
+  }, [finishInteractionAndSave]);
 
   const handleClear = () => {
     const emptyState = {};
@@ -596,7 +603,10 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                       <div
                         key={iso}
                         data-slot-key={iso}
-                        onMouseDown={() => handleMouseDown(iso)}
+                        onMouseDown={() => {
+                          if (isTouchInteraction.current) return;
+                          handleMouseDown(iso);
+                        }}
                         onMouseEnter={() => handleMouseEnter(iso)}
                         onTouchStart={e => handleTouchStart(iso, e)}
                         className={`h-8 rounded-md border transition-all duration-150 ease-out cursor-pointer flex items-center justify-between px-1.5 relative select-none ${
