@@ -25,7 +25,11 @@ export function App() {
     const path = window.location.pathname;
     if (path.includes('/session/')) {
       const parts = path.split('/session/');
-      return parts[parts.length - 1] || null;
+      const rawId = parts[parts.length - 1];
+      if (rawId) {
+        const cleanedId = rawId.split('?')[0].split('#')[0].replace(/\/+$/, '');
+        return cleanedId || null;
+      }
     }
     const params = new URLSearchParams(window.location.search);
     return params.get('session') || null;
