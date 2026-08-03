@@ -46,17 +46,6 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Action Controls */}
         <div className="flex items-center space-x-2">
-          {onNavigateTv && (
-            <button
-              onClick={onNavigateTv}
-              className="flex items-center space-x-1.5 text-xs font-bold px-2.5 py-1 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 transition-all border border-indigo-200/80 shadow-2xs active:scale-95"
-              title="Open TV Photo Showcase Mode"
-            >
-              <Tv className="w-3.5 h-3.5 text-indigo-600" />
-              <span className="hidden sm:inline">TV Showcase</span>
-            </button>
-          )}
-
           <div 
             title={isNeonConfigured ? "Connected to Neon DB Postgres" : "Local Browser Storage Active"}
             className={`hidden sm:flex items-center space-x-1 text-[10px] font-bold px-2 py-0.5 rounded-full border transition-all ${

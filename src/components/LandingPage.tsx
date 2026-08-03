@@ -51,14 +51,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
           <div className="flex items-center space-x-3">
             <button
-              onClick={onOpenTvShowcase}
-              className="flex items-center space-x-1.5 text-xs font-bold px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 transition-all shadow-sm active:scale-95"
-            >
-              <Tv className="w-3.5 h-3.5 text-indigo-400" />
-              <span>TV Showcase</span>
-            </button>
-
-            <button
               onClick={() => setShowCreateModal(true)}
               className="flex items-center space-x-1.5 text-xs font-black px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-teal-500 hover:brightness-110 text-white transition-all shadow-lg shadow-indigo-500/25 active:scale-95"
             >
@@ -99,14 +91,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           >
             <span>Create Free Meeting Session</span>
             <ArrowRight className="w-5 h-5 stroke-[2.5]" />
-          </button>
-
-          <button
-            onClick={onOpenTvShowcase}
-            className="flex items-center space-x-2 text-base font-bold px-6 py-4 rounded-2xl bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 transition-all shadow-md active:scale-95"
-          >
-            <Tv className="w-5 h-5 text-indigo-400" />
-            <span>Launch TV Presentation</span>
           </button>
         </div>
 
