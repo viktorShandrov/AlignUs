@@ -53,6 +53,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   const dragMode = useRef<'add' | 'remove'>('add');
   const hasModifiedState = useRef<boolean>(false);
   const activeTouchSlot = useRef<string | null>(null);
+  const lastSavedSlotsRef = useRef<Record<string, SelectedSlotState>>(mySelectedSlots);
 
   const participantColorMap = React.useMemo(() => {
     const map: Record<string, ReturnType<typeof getParticipantColor>> = {};
@@ -62,12 +63,22 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
     return map;
   }, [participants]);
 
-  // Sync server selections only when not actively dragging or holding un-saved edits
+  // Sync server selections only when not actively dragging, saving, or holding un-saved edits
   useEffect(() => {
-    if (!isDragging.current && !hasModifiedState.current) {
-      setSlotState(mySelectedSlots);
+    if (isDragging.current || hasModifiedState.current || saveStatus === 'saving') {
+      return;
     }
-  }, [mySelectedSlots]);
+    const propCount = Object.keys(mySelectedSlots).length;
+    const lastSavedCount = Object.keys(lastSavedSlotsRef.current).length;
+
+    // Guard against stale empty prop updates right after a non-empty save
+    if (propCount === 0 && lastSavedCount > 0) {
+      return;
+    }
+
+    setSlotState(mySelectedSlots);
+    lastSavedSlotsRef.current = mySelectedSlots;
+  }, [mySelectedSlots, saveStatus]);
 
   const { dates, slotsByDate } = generateSlotsForRange(dateRange);
 
@@ -81,6 +92,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
       if (!currentParticipantName.trim()) return;
       setSaveStatus('saving');
       setSaveError(null);
+      lastSavedSlotsRef.current = currentState;
 
       const formattedSlots = Object.entries(currentState).map(([isoStart]) => {
         const endMs = new Date(isoStart).getTime() + 30 * 60 * 1000;

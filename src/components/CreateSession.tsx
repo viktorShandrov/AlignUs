@@ -5,10 +5,11 @@ import { Calendar, Clock, Plus, Sparkles, ArrowRight, CheckCircle2, Layers } fro
 import { format } from 'date-fns';
 
 interface CreateSessionProps {
+  userId?: string;
   onSessionCreated: (sessionId: string) => void;
 }
 
-export const CreateSession: React.FC<CreateSessionProps> = ({ onSessionCreated }) => {
+export const CreateSession: React.FC<CreateSessionProps> = ({ userId, onSessionCreated }) => {
   const todayStr = format(new Date(), 'yyyy-MM-dd');
 
   const [title, setTitle] = useState('');
@@ -32,7 +33,7 @@ export const CreateSession: React.FC<CreateSessionProps> = ({ onSessionCreated }
         endTime,
       };
 
-      const session = await createSession(title.trim(), config);
+      const session = await createSession(title.trim(), config, userId);
       onSessionCreated(session.id);
     } catch (err) {
       console.error('Failed to create session:', err);

@@ -16,6 +16,7 @@ export interface FinalizedSlot {
 export interface Session {
   id: string;
   title: string;
+  creatorUserId?: string | null;
   dateRange: DateRangeConfig;
   finalizedSlot?: FinalizedSlot | null;
   createdAt: string;

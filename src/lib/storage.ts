@@ -1,6 +1,6 @@
 import { db, isNeonConfigured } from '../db';
 import { sessions, participants, availabilities } from '../db/schema';
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, or, desc } from 'drizzle-orm';
 import { Session, Participant, Availability, DateRangeConfig, FinalizedSlot } from '../types';
 import { trackEvent } from './analytics';
 
@@ -23,13 +23,14 @@ function setLocalData<T>(key: string, value: T): void {
   }
 }
 
-export async function createSession(title: string, dateRange: DateRangeConfig): Promise<Session> {
+export async function createSession(title: string, dateRange: DateRangeConfig, creatorUserId?: string): Promise<Session> {
   const id = crypto.randomUUID();
   const createdAt = new Date().toISOString();
 
   const newSession: Session = {
     id,
     title,
+    creatorUserId: creatorUserId || null,
     dateRange,
     finalizedSlot: null,
     createdAt,
@@ -42,6 +43,7 @@ export async function createSession(title: string, dateRange: DateRangeConfig): 
       await db.insert(sessions).values({
         id,
         title,
+        creatorUserId: creatorUserId || null,
         dateRange,
         finalizedSlot: null,
         createdAt: new Date(),
@@ -67,6 +69,7 @@ export async function getSession(id: string): Promise<Session | null> {
         return {
           id: row.id,
           title: row.title,
+          creatorUserId: row.creatorUserId || null,
           dateRange: row.dateRange,
           finalizedSlot: row.finalizedSlot || null,
           createdAt: new Date(row.createdAt).toISOString(),
@@ -83,8 +86,14 @@ export async function getSession(id: string): Promise<Session | null> {
 
 export async function setSessionFinalizedSlot(
   sessionId: string,
-  finalizedSlot: FinalizedSlot | null
+  finalizedSlot: FinalizedSlot | null,
+  requestingUserId?: string
 ): Promise<void> {
+  const currentSession = await getSession(sessionId);
+  if (currentSession?.creatorUserId && requestingUserId && currentSession.creatorUserId !== requestingUserId) {
+    throw new Error('Only the creator of this session can finalize or alter time slots.');
+  }
+
   await trackEvent('slot_finalized', `/session/${sessionId}`, { sessionId, finalizedSlot });
 
   if (isNeonConfigured && db) {
@@ -104,6 +113,69 @@ export async function setSessionFinalizedSlot(
     localSessions[sessionId].finalizedSlot = finalizedSlot;
     setLocalData('sessions', localSessions);
   }
+}
+
+export async function getUserSessions(userId: string): Promise<Session[]> {
+  if (!userId) return [];
+
+  const sessionMap = new Map<string, Session>();
+
+  // 1. Local storage sessions & participants
+  const localSessions = getLocalData<Record<string, Session>>('sessions', {});
+  const localParticipants = getLocalData<Record<string, Participant>>('participants', {});
+
+  const localPtSessionIds = new Set(
+    Object.values(localParticipants)
+      .filter(p => p.userId === userId)
+      .map(p => p.sessionId)
+  );
+
+  Object.values(localSessions).forEach(s => {
+    if ((s.creatorUserId && s.creatorUserId === userId) || localPtSessionIds.has(s.id)) {
+      sessionMap.set(s.id, s);
+    }
+  });
+
+  // 2. Neon DB sessions
+  if (isNeonConfigured && db) {
+    try {
+      const ptRes = await db
+        .select({ sessionId: participants.sessionId })
+        .from(participants)
+        .where(eq(participants.userId, userId));
+      
+      const ptSessionIds = ptRes.map(p => p.sessionId).filter(Boolean);
+
+      const conditions = [eq(sessions.creatorUserId, userId)];
+      if (ptSessionIds.length > 0) {
+        conditions.push(inArray(sessions.id, ptSessionIds));
+      }
+
+      const res = await db
+        .select()
+        .from(sessions)
+        .where(or(...conditions))
+        .orderBy(desc(sessions.createdAt))
+        .limit(10);
+
+      res.forEach(row => {
+        sessionMap.set(row.id, {
+          id: row.id,
+          title: row.title,
+          creatorUserId: row.creatorUserId || null,
+          dateRange: row.dateRange,
+          finalizedSlot: row.finalizedSlot || null,
+          createdAt: new Date(row.createdAt).toISOString(),
+        });
+      });
+    } catch (err) {
+      console.warn('Neon DB getUserSessions failed, using local sessions:', err);
+    }
+  }
+
+  const all = Array.from(sessionMap.values());
+  all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  return all.slice(0, 10);
 }
 
 export async function getSessionParticipants(sessionId: string): Promise<Participant[]> {

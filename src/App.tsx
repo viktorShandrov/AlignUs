@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Navbar } from './components/Navbar';
 import { CreateSession } from './components/CreateSession';
+import { RecentSessionsList } from './components/RecentSessionsList';
 import { CalendarGrid } from './components/CalendarGrid';
 import { ParticipantList } from './components/ParticipantList';
 import { NameModal } from './components/NameModal';
@@ -204,13 +205,21 @@ export function App() {
     try {
       const result = await Promise.race([savePromise, timeoutPromise]);
       if (result.participant) {
+        const realPtId = result.participant.id;
         setParticipants(prev => {
-          const exists = prev.some(p => p.id === result.participant.id);
+          const exists = prev.some(p => p.id === realPtId);
           if (exists) {
-            return prev.map(p => (p.id === result.participant.id ? result.participant : p));
+            return prev.map(p => (p.id === realPtId ? result.participant : p));
           }
-          return [...prev, result.participant];
+          const withoutTemp = prev.filter(p => p.id !== myPtId);
+          return [...withoutTemp, result.participant];
         });
+
+        if (realPtId !== myPtId) {
+          setAvailabilities(prev =>
+            prev.map(a => (a.participantId === myPtId ? { ...a, participantId: realPtId } : a))
+          );
+        }
       }
     } catch (err) {
       console.error('Failed saving availability:', err);
@@ -218,10 +227,12 @@ export function App() {
     }
   };
 
+  const isCreator = Boolean(session && (!session.creatorUserId || session.creatorUserId === userId));
+
   const handleFinalizeSlot = async (slot: FinalizedSlot | null) => {
     if (!sessionId) return;
     try {
-      await setSessionFinalizedSlot(sessionId, slot);
+      await setSessionFinalizedSlot(sessionId, slot, userId);
       await loadSessionData();
     } catch (err) {
       console.error('Failed finalizing slot:', err);
@@ -262,7 +273,10 @@ export function App() {
         {isDashboard ? (
           <Dashboard onNavigateHome={navigateToHome} />
         ) : !sessionId ? (
-          <CreateSession onSessionCreated={navigateToSession} />
+          <div className="space-y-6">
+            <CreateSession userId={userId} onSessionCreated={navigateToSession} />
+            <RecentSessionsList userId={userId} onSelectSession={navigateToSession} />
+          </div>
         ) : loading ? (
           <div className="flex flex-col items-center justify-center py-16 space-y-3">
             <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
@@ -282,7 +296,7 @@ export function App() {
           </div>
         ) : (
           <div className="space-y-3">
-            {/* Top Participant Bar & Active Roster */}
+            {/* Participant Bar & Active Roster */}
             <ParticipantList
               participants={participants}
               availabilities={availabilities}
@@ -293,6 +307,15 @@ export function App() {
               hoveredParticipantId={hoveredParticipantId}
               onHoverParticipant={setHoveredParticipantId}
             />
+
+            {!isCreator && !session.finalizedSlot && (
+              <div className="bg-amber-50 border border-amber-200/80 rounded-xl px-3 py-2 text-xs text-amber-800 font-medium flex items-center justify-between shadow-2xs">
+                <span className="flex items-center gap-1.5">
+                  <span className="text-base">📌</span>
+                  Only the session creator can finalize the meeting time slot.
+                </span>
+              </div>
+            )}
 
             {/* Embedded Top Pick Card inside CalendarGrid */}
             <div className="w-full">
@@ -309,7 +332,7 @@ export function App() {
                 selectedDuration={selectedDuration}
                 onDurationChange={setSelectedDuration}
                 finalizedSlot={session.finalizedSlot}
-                onFinalizeSlot={handleFinalizeSlot}
+                onFinalizeSlot={isCreator ? handleFinalizeSlot : undefined}
               />
             </div>
           </div>

@@ -4,6 +4,7 @@ import { FinalizedSlot } from '../types';
 export const sessions = pgTable('sessions', {
   id: uuid('id').defaultRandom().primaryKey(),
   title: text('title').notNull(),
+  creatorUserId: text('creator_user_id'),
   dateRange: jsonb('date_range').$type<{
     startDate: string;
     endDate: string;
