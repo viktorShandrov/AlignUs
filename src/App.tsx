@@ -6,6 +6,7 @@ import { CalendarGrid } from './components/CalendarGrid';
 import { ParticipantList } from './components/ParticipantList';
 import { NameModal } from './components/NameModal';
 import { Dashboard } from './components/Dashboard';
+import { TvPresentation } from './components/TvPresentation';
 import { Session, Participant, Availability, FinalizedSlot } from './types';
 import { getSession, getSessionAvailabilities, saveParticipantAvailability, setSessionFinalizedSlot } from './lib/storage';
 import { generateSlotsForRange } from './lib/dateUtils';
@@ -20,6 +21,7 @@ export function App() {
   const [currentPath, setCurrentPath] = useState<string>(() => window.location.pathname);
 
   const isDashboard = currentPath.startsWith('/dashboard') || currentPath.startsWith('/stats');
+  const isTvPage = currentPath.startsWith('/tv') || currentPath.startsWith('/promo') || currentPath.startsWith('/presentation');
 
   const [sessionId, setSessionId] = useState<string | null>(() => {
     const path = window.location.pathname;
@@ -38,7 +40,7 @@ export function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [availabilities, setAvailabilities] = useState<Availability[]>([]);
-  const [loading, setLoading] = useState<boolean>(Boolean(sessionId && !isDashboard));
+  const [loading, setLoading] = useState<boolean>(Boolean(sessionId && !isDashboard && !isTvPage));
   const [error, setError] = useState<string | null>(null);
   const [selectedDuration, setSelectedDuration] = useState<number>(30); // Default 30 minutes
   const [isNameModalOpen, setIsNameModalOpen] = useState<boolean>(false);
@@ -84,6 +86,13 @@ export function App() {
     setSession(null);
     setCurrentPath('/dashboard');
     window.history.pushState({}, '', '/dashboard');
+  };
+
+  const navigateToTv = () => {
+    setSessionId(null);
+    setSession(null);
+    setCurrentPath('/tv');
+    window.history.pushState({}, '', '/tv');
   };
 
   const myParticipant = participants.find(
@@ -266,11 +275,16 @@ export function App() {
     return { heatmapMap: heatmap, bestWindows: windows };
   }, [session, participants, availabilities, selectedDuration]);
 
+  if (isTvPage) {
+    return <TvPresentation onBackToApp={navigateToHome} />;
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans relative">
       <Navbar
         sessionTitle={session?.title}
         onNavigateHome={navigateToHome}
+        onNavigateTv={navigateToTv}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto p-2 sm:p-4">
