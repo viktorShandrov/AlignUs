@@ -120,7 +120,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   );
 
   const handleMouseDown = (isoStart: string) => {
-    if (viewMode !== 'edit') return;
+    if (viewMode !== 'edit' || finalizedSlot) return;
     isDragging.current = true;
     hasModifiedState.current = true;
 
@@ -140,7 +140,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
 
   const handleMouseEnter = (isoStart: string) => {
     setHoveredSlotKey(isoStart);
-    if (!isDragging.current || viewMode !== 'edit') return;
+    if (!isDragging.current || viewMode !== 'edit' || finalizedSlot) return;
 
     hasModifiedState.current = true;
 
@@ -179,14 +179,14 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
 
   // Touch Gesture Handling for Mobile Devices
   const handleTouchStart = (isoStart: string, e: React.TouchEvent) => {
-    if (viewMode !== 'edit') return;
+    if (viewMode !== 'edit' || finalizedSlot) return;
     isTouchInteraction.current = true;
     activeTouchSlot.current = isoStart;
     handleMouseDown(isoStart);
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (!isDragging.current || viewMode !== 'edit') return;
+    if (!isDragging.current || viewMode !== 'edit' || finalizedSlot) return;
     const touch = e.touches[0];
     if (!touch) return;
 
@@ -224,6 +224,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   }, [finishInteractionAndSave]);
 
   const handleClear = () => {
+    if (finalizedSlot) return;
     const emptyState = {};
     setSlotState(emptyState);
     performSave(emptyState);
@@ -497,7 +498,12 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
           </div>
 
           <div className="flex items-center space-x-2">
-            {currentParticipantName.trim() ? (
+            {finalizedSlot ? (
+              <div className="flex items-center space-x-1 text-[11px] font-bold px-2.5 py-1 rounded-md bg-amber-50 text-amber-800 border border-amber-200">
+                <Lock className="w-3 h-3 text-amber-600 flex-shrink-0" />
+                <span>Финализирана среща (изборът на часове е заключен) / Session finalized</span>
+              </div>
+            ) : currentParticipantName.trim() ? (
               <div className={`flex items-center space-x-1 text-[11px] font-bold px-2 py-0.5 rounded border transition-all duration-200 ${
                 saveStatus === 'saved'
                   ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
@@ -529,13 +535,15 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
               </span>
             )}
 
-            <button
-              onClick={handleClear}
-              className="flex items-center space-x-1 text-[11px] text-slate-500 hover:text-rose-600 px-1.5 py-0.5 rounded hover:bg-rose-50 transition-colors"
-            >
-              <Trash2 className="w-3 h-3" />
-              <span>Изчисти</span>
-            </button>
+            {!finalizedSlot && (
+              <button
+                onClick={handleClear}
+                className="flex items-center space-x-1 text-[11px] text-slate-500 hover:text-rose-600 px-1.5 py-0.5 rounded hover:bg-rose-50 transition-colors"
+              >
+                <Trash2 className="w-3 h-3" />
+                <span>Изчисти</span>
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -610,21 +618,24 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
 
                   if (viewMode === 'edit') {
                     const isSel = Boolean(myState);
+                    const isLocked = Boolean(finalizedSlot);
 
                     return (
                       <div
                         key={iso}
                         data-slot-key={iso}
                         onMouseDown={() => {
-                          if (isTouchInteraction.current) return;
+                          if (isTouchInteraction.current || isLocked) return;
                           handleMouseDown(iso);
                         }}
                         onMouseEnter={() => handleMouseEnter(iso)}
                         onTouchStart={e => handleTouchStart(iso, e)}
-                        className={`h-8 rounded-md border transition-all duration-150 ease-out cursor-pointer flex items-center justify-between px-1.5 relative select-none ${
-                          isSel
-                            ? 'bg-indigo-100 border-indigo-500 text-indigo-900 shadow-2xs font-bold'
-                            : 'bg-white border-slate-200 hover:bg-slate-100'
+                        className={`h-8 rounded-md border transition-all duration-150 ease-out flex items-center justify-between px-1.5 relative select-none ${
+                          isLocked
+                            ? 'cursor-not-allowed opacity-80 ' + (isSel ? 'bg-indigo-100/70 border-indigo-300 text-indigo-900' : 'bg-slate-100/50 border-slate-200')
+                            : isSel
+                            ? 'cursor-pointer bg-indigo-100 border-indigo-500 text-indigo-900 shadow-2xs font-bold'
+                            : 'cursor-pointer bg-white border-slate-200 hover:bg-slate-100'
                         }`}
                       >
                         {isSel ? (

@@ -261,6 +261,11 @@ export async function saveParticipantAvailability(
   participantName: string,
   selectedSlots: Array<{ startSlot: string; endSlot: string; isPreferred: boolean }>
 ): Promise<{ participant: Participant; availabilitiesCount: number }> {
+  const currentSession = await getSession(sessionId);
+  if (currentSession?.finalizedSlot) {
+    throw new Error('This session has been finalized. Selecting or altering slots is locked.');
+  }
+
   const cleanName = participantName.trim();
   if (!cleanName) {
     throw new Error('Participant name cannot be empty');

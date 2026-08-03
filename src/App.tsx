@@ -40,7 +40,7 @@ export function App() {
   const [availabilities, setAvailabilities] = useState<Availability[]>([]);
   const [loading, setLoading] = useState<boolean>(Boolean(sessionId && !isDashboard));
   const [error, setError] = useState<string | null>(null);
-  const [selectedDuration, setSelectedDuration] = useState<number>(60); // Default 1 hour
+  const [selectedDuration, setSelectedDuration] = useState<number>(30); // Default 30 minutes
   const [isNameModalOpen, setIsNameModalOpen] = useState<boolean>(false);
 
   const [currentName, setCurrentName] = useState<string>(() => {
@@ -162,7 +162,7 @@ export function App() {
   const handleSaveMySlots = async (
     slots: Array<{ startSlot: string; endSlot: string; isPreferred?: boolean }>
   ) => {
-    if (!sessionId || !currentName.trim()) return;
+    if (!sessionId || !currentName.trim() || session?.finalizedSlot) return;
 
     lastSaveTime.current = Date.now();
 
