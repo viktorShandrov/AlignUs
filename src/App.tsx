@@ -85,6 +85,13 @@ export function App() {
     p => (p.userId && p.userId === userId) || (!p.userId && currentName.trim() && p.name.trim().toLowerCase() === currentName.trim().toLowerCase())
   );
 
+  const myParticipantRef = React.useRef(myParticipant);
+  useEffect(() => {
+    myParticipantRef.current = myParticipant;
+  }, [myParticipant]);
+
+  const loadedSessionIdRef = React.useRef<string | null>(null);
+
   const loadSessionData = useCallback(async () => {
     if (!sessionId || isDashboard) return;
     const fetchTime = Date.now();
@@ -101,8 +108,9 @@ export function App() {
       setParticipants(prevPts => (JSON.stringify(prevPts) === JSON.stringify(pts) ? prevPts : pts));
 
       setAvailabilities(prevAvs => {
-        if (fetchTime < lastSaveTime.current && myParticipant) {
-          const myPtId = myParticipant.id;
+        const activeMyPt = myParticipantRef.current;
+        if (fetchTime < lastSaveTime.current && activeMyPt) {
+          const myPtId = activeMyPt.id;
           const myLocalAvails = prevAvs.filter(a => a.participantId === myPtId);
           const serverOthersAvails = avs.filter(a => a.participantId !== myPtId);
           return [...serverOthersAvails, ...myLocalAvails];
@@ -115,12 +123,18 @@ export function App() {
     } finally {
       setLoading(false);
     }
-  }, [sessionId, isDashboard, myParticipant]);
+  }, [sessionId, isDashboard]);
 
   useEffect(() => {
     if (sessionId && !isDashboard) {
-      setLoading(true);
+      if (loadedSessionIdRef.current !== sessionId) {
+        loadedSessionIdRef.current = sessionId;
+        setLoading(true);
+      }
       loadSessionData();
+    } else {
+      loadedSessionIdRef.current = null;
+      setLoading(false);
     }
   }, [sessionId, isDashboard, loadSessionData]);
 
