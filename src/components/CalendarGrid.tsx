@@ -52,7 +52,6 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   const isDragging = useRef<boolean>(false);
   const dragMode = useRef<'add' | 'remove'>('add');
   const hasModifiedState = useRef<boolean>(false);
-  const activeTouchSlot = useRef<string | null>(null);
   const lastSavedSlotsRef = useRef<Record<string, SelectedSlotState>>(mySelectedSlots);
 
   const participantColorMap = React.useMemo(() => {
@@ -155,6 +154,26 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
     });
   };
 
+  const touchInfoRef = useRef<{ x: number; y: number; slotKey: string; isScroll: boolean } | null>(null);
+
+  const toggleSingleSlot = React.useCallback(
+    (isoStart: string) => {
+      if (finalizedSlot) return;
+      hasModifiedState.current = true;
+      setSlotState(prev => {
+        const nextState = { ...prev };
+        if (nextState[isoStart]) {
+          delete nextState[isoStart];
+        } else {
+          nextState[isoStart] = { isPreferred: false };
+        }
+        performSave(nextState);
+        return nextState;
+      });
+    },
+    [finalizedSlot, performSave]
+  );
+
   const isTouchInteraction = useRef<boolean>(false);
   const slotStateRef = useRef(slotState);
 
@@ -177,39 +196,54 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
     }, 300);
   }, [performSave]);
 
-  // Touch Gesture Handling for Mobile Devices
+  // Touch Gesture Handling for Mobile Devices (differentiates scrolling from tapping)
   const handleTouchStart = (isoStart: string, e: React.TouchEvent) => {
     if (viewMode !== 'edit' || finalizedSlot) return;
     isTouchInteraction.current = true;
-    activeTouchSlot.current = isoStart;
-    handleMouseDown(isoStart);
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!isDragging.current || viewMode !== 'edit' || finalizedSlot) return;
     const touch = e.touches[0];
     if (!touch) return;
 
-    const targetElement = document.elementFromPoint(touch.clientX, touch.clientY);
-    if (!targetElement) return;
+    touchInfoRef.current = {
+      x: touch.clientX,
+      y: touch.clientY,
+      slotKey: isoStart,
+      isScroll: false,
+    };
+  };
 
-    const slotEl = targetElement.closest('[data-slot-key]') as HTMLElement | null;
-    if (slotEl) {
-      const slotKey = slotEl.getAttribute('data-slot-key');
-      if (slotKey && slotKey !== activeTouchSlot.current) {
-        activeTouchSlot.current = slotKey;
-        handleMouseEnter(slotKey);
-      }
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchInfoRef.current || viewMode !== 'edit' || finalizedSlot) return;
+    const touch = e.touches[0];
+    if (!touch) return;
+
+    const dx = Math.abs(touch.clientX - touchInfoRef.current.x);
+    const dy = Math.abs(touch.clientY - touchInfoRef.current.y);
+
+    // If touch moved more than 8px horizontally or vertically, user is scrolling/swiping
+    if (dx > 8 || dy > 8) {
+      touchInfoRef.current.isScroll = true;
     }
   };
 
-  const handleTouchEnd = () => {
-    activeTouchSlot.current = null;
-    finishInteractionAndSave();
-  };
+  const handleTouchEnd = React.useCallback(() => {
+    if (touchInfoRef.current) {
+      const { slotKey, isScroll } = touchInfoRef.current;
+      if (!isScroll && slotKey) {
+        toggleSingleSlot(slotKey);
+      }
+      touchInfoRef.current = null;
+    }
+
+    setTimeout(() => {
+      isTouchInteraction.current = false;
+    }, 300);
+  }, [toggleSingleSlot]);
 
   useEffect(() => {
     const handleGlobalEnd = () => {
+      if (touchInfoRef.current) {
+        handleTouchEnd();
+      }
       finishInteractionAndSave();
     };
 
@@ -221,7 +255,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
       window.removeEventListener('touchend', handleGlobalEnd);
       window.removeEventListener('touchcancel', handleGlobalEnd);
     };
-  }, [finishInteractionAndSave]);
+  }, [finishInteractionAndSave, handleTouchEnd]);
 
   const handleClear = () => {
     if (finalizedSlot) return;
