@@ -7,6 +7,7 @@ import { ParticipantList } from './components/ParticipantList';
 import { NameModal } from './components/NameModal';
 import { Dashboard } from './components/Dashboard';
 import { TvPresentation } from './components/TvPresentation';
+import { LandingPage } from './components/LandingPage';
 import { Session, Participant, Availability, FinalizedSlot } from './types';
 import { getSession, getSessionAvailabilities, saveParticipantAvailability, setSessionFinalizedSlot } from './lib/storage';
 import { generateSlotsForRange } from './lib/dateUtils';
@@ -277,6 +278,16 @@ export function App() {
 
   if (isTvPage) {
     return <TvPresentation onBackToApp={navigateToHome} />;
+  }
+
+  if (!sessionId && !isDashboard) {
+    return (
+      <LandingPage
+        userId={userId}
+        onSessionCreated={navigateToSession}
+        onOpenTvShowcase={navigateToTv}
+      />
+    );
   }
 
   return (
