@@ -1,6 +1,6 @@
 import { db, isNeonConfigured } from '../db';
 import { sessions, participants, availabilities } from '../db/schema';
-import { eq, inArray } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { Session, Participant, Availability, DateRangeConfig, FinalizedSlot } from '../types';
 
 const LOCAL_STORAGE_PREFIX = 'syncmeet_demo_';
@@ -125,7 +125,22 @@ export async function getSessionParticipants(sessionId: string): Promise<Partici
     rawParticipants = Object.values(localParticipants).filter(p => p.sessionId === sessionId);
   }
 
-  return rawParticipants;
+  // Deduplicate participants by userId (keep the most recent record per userId if duplicates exist)
+  const uniqueMap = new Map<string, Participant>();
+  const results: Participant[] = [];
+
+  for (const pt of rawParticipants) {
+    if (pt.userId) {
+      if (!uniqueMap.has(pt.userId)) {
+        uniqueMap.set(pt.userId, pt);
+        results.push(pt);
+      }
+    } else {
+      results.push(pt);
+    }
+  }
+
+  return results;
 }
 
 export async function getSessionAvailabilities(sessionId: string): Promise<{
@@ -179,14 +194,19 @@ export async function saveParticipantAvailability(
 
   const existingPts = await getSessionParticipants(sessionId);
   
-  // Find any existing match by userId, or fallback to name for legacy records
-  const existingMatch = existingPts.find(
-    p => (p.userId && p.userId === userId) || (!p.userId && p.name.trim().toLowerCase() === cleanName.toLowerCase())
-  );
+  // 1-to-1 Association: Primary match strictly by userId
+  let existingMatch = existingPts.find(p => p.userId && p.userId === userId);
 
-  // Prevent using a name that is already taken by another participant in the session
+  // Fallback match by name for legacy records without userId
+  if (!existingMatch) {
+    existingMatch = existingPts.find(p => !p.userId && p.name.trim().toLowerCase() === cleanName.toLowerCase());
+  }
+
+  // Check if name is taken by another participant with a DIFFERENT userId
   const nameTaken = existingPts.some(
-    p => p.id !== existingMatch?.id && p.name.trim().toLowerCase() === cleanName.toLowerCase()
+    p => p.id !== existingMatch?.id &&
+         p.name.trim().toLowerCase() === cleanName.toLowerCase() &&
+         (p.userId ? p.userId !== userId : true)
   );
 
   if (nameTaken) {
@@ -194,6 +214,9 @@ export async function saveParticipantAvailability(
   }
 
   const participantId = existingMatch ? existingMatch.id : crypto.randomUUID();
+
+  // Find any redundant participant records for the same userId in this session to clean up
+  const redundantPts = existingPts.filter(p => p.userId === userId && p.id !== participantId);
 
   const participant: Participant = {
     id: participantId,
@@ -206,6 +229,12 @@ export async function saveParticipantAvailability(
 
   if (isNeonConfigured && db) {
     try {
+      // Clean up redundant records if any
+      for (const red of redundantPts) {
+        await db.delete(availabilities).where(eq(availabilities.participantId, red.id));
+        await db.delete(participants).where(eq(participants.id, red.id));
+      }
+
       if (!existingMatch) {
         await db.insert(participants).values({
           id: participantId,
@@ -245,12 +274,17 @@ export async function saveParticipantAvailability(
 
   // Local storage fallback
   const localPts = getLocalData<Record<string, Participant>>('participants', {});
+  redundantPts.forEach(red => {
+    delete localPts[red.id];
+  });
   localPts[participantId] = participant;
   setLocalData('participants', localPts);
 
   const localAvails = getLocalData<Record<string, Availability>>('availabilities', {});
+  // Delete old availabilities for participant and redundant ones
+  const ptIdsToRemove = [participantId, ...redundantPts.map(r => r.id)];
   Object.keys(localAvails).forEach(k => {
-    if (localAvails[k].participantId === participantId) {
+    if (ptIdsToRemove.includes(localAvails[k].participantId)) {
       delete localAvails[k];
     }
   });

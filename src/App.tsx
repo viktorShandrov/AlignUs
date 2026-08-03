@@ -3,6 +3,7 @@ import { Navbar } from './components/Navbar';
 import { CreateSession } from './components/CreateSession';
 import { CalendarGrid } from './components/CalendarGrid';
 import { ParticipantList } from './components/ParticipantList';
+import { NameModal } from './components/NameModal';
 import { Session, Participant, Availability, FinalizedSlot } from './types';
 import { getSession, getSessionAvailabilities, saveParticipantAvailability, setSessionFinalizedSlot } from './lib/storage';
 import { generateSlotsForRange } from './lib/dateUtils';
@@ -29,6 +30,7 @@ export function App() {
   const [loading, setLoading] = useState<boolean>(Boolean(sessionId));
   const [error, setError] = useState<string | null>(null);
   const [selectedDuration, setSelectedDuration] = useState<number>(60); // Default 1 hour
+  const [isNameModalOpen, setIsNameModalOpen] = useState<boolean>(false);
 
   const [currentName, setCurrentName] = useState<string>(() => {
     return localStorage.getItem('syncmeet_my_name') || '';
@@ -48,6 +50,11 @@ export function App() {
   const handleNoteChange = (note: string) => {
     setCurrentNote(note);
     localStorage.setItem('syncmeet_my_note', note);
+  };
+
+  const handleSaveModalName = (name: string) => {
+    handleNameChange(name);
+    setIsNameModalOpen(false);
   };
 
   const navigateToSession = (id: string) => {
@@ -98,6 +105,13 @@ export function App() {
     }, 2000);
     return () => clearInterval(interval);
   }, [sessionId, loadSessionData]);
+
+  // Automatically prompt first-time user for name if not set
+  useEffect(() => {
+    if (sessionId && !loading && session && !currentName.trim()) {
+      setIsNameModalOpen(true);
+    }
+  }, [sessionId, loading, session, currentName]);
 
   const handleSaveMySlots = async (
     slots: Array<{ startSlot: string; endSlot: string; isPreferred: boolean }>
@@ -185,11 +199,12 @@ export function App() {
               currentUserId={userId}
               onNameChange={handleNameChange}
               onNoteChange={handleNoteChange}
+              onOpenNameModal={() => setIsNameModalOpen(true)}
               hoveredParticipantId={hoveredParticipantId}
               onHoverParticipant={setHoveredParticipantId}
             />
 
-            {/* Option B: Embedded Top Pick Card inside CalendarGrid */}
+            {/* Embedded Top Pick Card inside CalendarGrid */}
             <div className="w-full">
               <CalendarGrid
                 dateRange={session.dateRange}
@@ -210,6 +225,16 @@ export function App() {
           </div>
         )}
       </main>
+
+      {/* Name Input & Edit Modal */}
+      <NameModal
+        isOpen={isNameModalOpen}
+        currentName={currentName}
+        onSaveName={handleSaveModalName}
+        onClose={() => setIsNameModalOpen(false)}
+        participants={participants}
+        currentUserId={userId}
+      />
     </div>
   );
 }
