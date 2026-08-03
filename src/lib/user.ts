@@ -1,12 +1,13 @@
-const USER_ID_KEY = 'syncmeet_user_id';
+const USER_ID_KEY = 'alignus_user_id';
+const LEGACY_USER_ID_KEY = 'syncmeet_user_id';
 
 export function getOrCreateUserId(): string {
   try {
-    let userId = localStorage.getItem(USER_ID_KEY);
+    let userId = localStorage.getItem(USER_ID_KEY) || localStorage.getItem(LEGACY_USER_ID_KEY);
     if (!userId) {
       userId = crypto.randomUUID();
-      localStorage.setItem(USER_ID_KEY, userId);
     }
+    localStorage.setItem(USER_ID_KEY, userId);
     return userId;
   } catch (e) {
     console.error('Failed accessing localStorage for user ID:', e);

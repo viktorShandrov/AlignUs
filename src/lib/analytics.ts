@@ -17,11 +17,12 @@ export interface AnalyticsEvent {
   timestamp: string;
 }
 
-const LOCAL_ANALYTICS_KEY = 'syncmeet_analytics_events';
+const LOCAL_ANALYTICS_KEY = 'alignus_analytics_events';
+const LEGACY_ANALYTICS_KEY = 'syncmeet_analytics_events';
 
 function getLocalEvents(): AnalyticsEvent[] {
   try {
-    const raw = localStorage.getItem(LOCAL_ANALYTICS_KEY);
+    const raw = localStorage.getItem(LOCAL_ANALYTICS_KEY) || localStorage.getItem(LEGACY_ANALYTICS_KEY);
     return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
@@ -121,7 +122,7 @@ export async function fetchAnalyticsEvents(): Promise<AnalyticsEvent[]> {
     (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
   );
 
-  const isCleared = localStorage.getItem('syncmeet_analytics_cleared') === 'true';
+  const isCleared = localStorage.getItem('alignus_analytics_cleared') === 'true' || localStorage.getItem('syncmeet_analytics_cleared') === 'true';
 
   if (merged.length === 0 && !isCleared) {
     return seedDemoAnalyticsData();
@@ -196,6 +197,7 @@ export function seedDemoAnalyticsData(): AnalyticsEvent[] {
   }
 
   events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  localStorage.removeItem('alignus_analytics_cleared');
   localStorage.removeItem('syncmeet_analytics_cleared');
   saveLocalEvents(events);
   return events;
@@ -203,7 +205,7 @@ export function seedDemoAnalyticsData(): AnalyticsEvent[] {
 
 export async function clearAnalyticsData(): Promise<void> {
   localStorage.removeItem(LOCAL_ANALYTICS_KEY);
-  localStorage.setItem('syncmeet_analytics_cleared', 'true');
+  localStorage.setItem('alignus_analytics_cleared', 'true');
   if (isNeonConfigured && db) {
     try {
       await db.delete(analyticsEvents);

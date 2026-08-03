@@ -26,7 +26,7 @@ export const ResultSummary: React.FC<ResultSummaryProps> = ({
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
   const handleCopySummary = (window: BestSlotWindow, index: number) => {
-    const text = `📅 SyncMeet Meeting Recommendation: "${sessionTitle}"\n⏰ Time: ${window.displayDate} @ ${window.displayTime}\n👥 Attendance: ${window.availableCount}/${window.totalParticipants} available (${window.participantNames.join(', ')})`;
+    const text = `📅 AlignUs Meeting Recommendation: "${sessionTitle}"\n⏰ Time: ${window.displayDate} @ ${window.displayTime}\n👥 Attendance: ${window.availableCount}/${window.totalParticipants} available (${window.participantNames.join(', ')})`;
     navigator.clipboard.writeText(text);
     setCopiedIndex(index);
     setTimeout(() => setCopiedIndex(null), 2500);
@@ -58,7 +58,7 @@ export const ResultSummary: React.FC<ResultSummaryProps> = ({
       sessionTitle,
       finalizedSlot.startSlot,
       finalizedSlot.endSlot,
-      `SyncMeet finalized meeting session.`
+      `AlignUs finalized meeting session.`
     );
 
     return (

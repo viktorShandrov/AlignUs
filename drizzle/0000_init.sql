@@ -1,4 +1,4 @@
--- SyncMeet Initial Database Migration Plan for Neon / PostgreSQL
+-- AlignUs Initial Database Migration Plan for Neon / PostgreSQL
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 

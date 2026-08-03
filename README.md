@@ -1,8 +1,8 @@
-# SyncMeet 📅⚡
+# AlignUs 📅⚡
 
 > A modern, high-performance, real-time group meeting scheduler built with React, Vite, Tailwind CSS, Drizzle ORM, and Neon PostgreSQL.
 
-SyncMeet allows teams and groups to effortlessly coordinate meeting times across dates and time slots with interactive availability heatmaps, automatic top-slot recommendations, and 1-click calendar exports.
+AlignUs allows teams and groups to effortlessly coordinate meeting times across dates and time slots with interactive availability heatmaps, automatic top-slot recommendations, and 1-click calendar exports.
 
 ---
 
@@ -32,8 +32,8 @@ SyncMeet allows teams and groups to effortlessly coordinate meeting times across
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/viktorShandrov/three_plus_scheduler.git
-   cd three_plus_scheduler
+   git clone https://github.com/viktorShandrov/AlignUs.git
+   cd AlignUs
    ```
 
 2. **Install dependencies:**
@@ -65,7 +65,7 @@ SyncMeet allows teams and groups to effortlessly coordinate meeting times across
 
 ---
 
-## 📖 How to Use SyncMeet
+## 📖 How to Use AlignUs
 
 1. **Create a Session:**
    - Enter a session title (e.g., *"Team Weekly Sync"*).

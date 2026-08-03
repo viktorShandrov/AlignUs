@@ -265,7 +265,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   };
 
   const handleCopySummary = (window: BestSlotWindow, index: number) => {
-    const text = `📅 SyncMeet Meeting Recommendation: "${sessionTitle}"\n⏰ Time: ${window.displayDate} @ ${window.displayTime}\n👥 Attendance: ${window.availableCount}/${participants.length} available (${window.participantNames.join(', ')})`;
+    const text = `📅 AlignUs Meeting Recommendation: "${sessionTitle}"\n⏰ Time: ${window.displayDate} @ ${window.displayTime}\n👥 Attendance: ${window.availableCount}/${participants.length} available (${window.participantNames.join(', ')})`;
     navigator.clipboard.writeText(text);
     setCopiedIndex(index);
     setTimeout(() => setCopiedIndex(null), 2500);
@@ -385,7 +385,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
             </div>
             <div className="flex items-center space-x-1.5 flex-shrink-0 self-end sm:self-auto">
               <a
-                href={getGoogleCalendarUrl(sessionTitle, finalizedSlot.startSlot, finalizedSlot.endSlot, `SyncMeet finalized meeting`)}
+                href={getGoogleCalendarUrl(sessionTitle, finalizedSlot.startSlot, finalizedSlot.endSlot, `AlignUs finalized meeting`)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center space-x-1 bg-emerald-600 text-white text-[11px] font-bold px-2.5 py-1 rounded-lg shadow-2xs"

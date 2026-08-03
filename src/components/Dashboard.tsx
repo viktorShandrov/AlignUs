@@ -278,7 +278,7 @@ export function Dashboard({ onNavigateHome }: DashboardProps) {
               Табло за Трафик и Потребление
             </h1>
             <p className="text-xs sm:text-sm text-slate-300 max-w-2xl">
-              Реалновремеви анализи на активността, посещенията и графиците в приложението SyncMeet.
+              Реалновремеви анализи на активността, посещенията и графиците в приложението AlignUs.
             </p>
           </div>
 

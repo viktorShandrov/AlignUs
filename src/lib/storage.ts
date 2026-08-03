@@ -4,11 +4,12 @@ import { eq, inArray, or, desc } from 'drizzle-orm';
 import { Session, Participant, Availability, DateRangeConfig, FinalizedSlot } from '../types';
 import { trackEvent } from './analytics';
 
-const LOCAL_STORAGE_PREFIX = 'syncmeet_demo_';
+const LOCAL_STORAGE_PREFIX = 'alignus_demo_';
+const LEGACY_STORAGE_PREFIX = 'syncmeet_demo_';
 
 function getLocalData<T>(key: string, defaultValue: T): T {
   try {
-    const raw = localStorage.getItem(LOCAL_STORAGE_PREFIX + key);
+    const raw = localStorage.getItem(LOCAL_STORAGE_PREFIX + key) || localStorage.getItem(LEGACY_STORAGE_PREFIX + key);
     return raw ? JSON.parse(raw) : defaultValue;
   } catch {
     return defaultValue;

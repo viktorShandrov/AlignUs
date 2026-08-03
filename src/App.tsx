@@ -44,7 +44,7 @@ export function App() {
   const [isNameModalOpen, setIsNameModalOpen] = useState<boolean>(false);
 
   const [currentName, setCurrentName] = useState<string>(() => {
-    return localStorage.getItem('syncmeet_my_name') || '';
+    return localStorage.getItem('alignus_my_name') || localStorage.getItem('syncmeet_my_name') || '';
   });
 
   const [hoveredParticipantId, setHoveredParticipantId] = useState<string | null>(null);
@@ -58,7 +58,7 @@ export function App() {
 
   const handleNameChange = (name: string) => {
     setCurrentName(name);
-    localStorage.setItem('syncmeet_my_name', name);
+    localStorage.setItem('alignus_my_name', name);
   };
 
   const handleSaveModalName = (name: string) => {

@@ -69,7 +69,7 @@ export const NameModal: React.FC<NameModalProps> = ({
           </div>
           <div>
             <h3 className="text-base font-black text-slate-900">
-              {isFirstTime ? 'Добре дошли в SyncMeet!' : 'Промяна на име'}
+              {isFirstTime ? 'Добре дошли в AlignUs!' : 'Промяна на име'}
             </h3>
             <p className="text-xs text-slate-500 font-medium">
               {isFirstTime

@@ -17,9 +17,9 @@ export function getGoogleCalendarUrl(
   const baseUrl = 'https://calendar.google.com/calendar/render';
   const params = new URLSearchParams({
     action: 'TEMPLATE',
-    text: `SyncMeet: ${title}`,
+    text: `AlignUs: ${title}`,
     dates: `${startStr}/${endStr}`,
-    details: details || `Scheduled via SyncMeet real-time scheduler.`,
+    details: details || `Scheduled via AlignUs real-time scheduler.`,
   });
 
   return `${baseUrl}?${params.toString()}`;
@@ -38,14 +38,14 @@ export function downloadIcalFile(
   const icsContent = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//SyncMeet//NONSGML v1.0//EN',
+    'PRODID:-//AlignUs//NONSGML v1.0//EN',
     'CALSCALE:GREGORIAN',
     'BEGIN:VEVENT',
     `UID:${crypto.randomUUID()}`,
     `DTSTAMP:${nowStr}`,
     `DTSTART:${startStr}`,
     `DTEND:${endStr}`,
-    `SUMMARY:SyncMeet: ${title}`,
+    `SUMMARY:AlignUs: ${title}`,
     `DESCRIPTION:${details.replace(/\n/g, '\\n')}`,
     'STATUS:CONFIRMED',
     'END:VEVENT',
