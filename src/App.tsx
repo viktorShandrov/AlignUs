@@ -220,8 +220,6 @@ export function App() {
       <Navbar
         sessionTitle={session?.title}
         onNavigateHome={navigateToHome}
-        onNavigateDashboard={navigateToDashboard}
-        isDashboardActive={isDashboard}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto p-2 sm:p-4">

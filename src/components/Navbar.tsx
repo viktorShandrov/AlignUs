@@ -1,19 +1,15 @@
 import React, { useState } from 'react';
-import { Calendar, Share2, Check, Database, BarChart3 } from 'lucide-react';
+import { Calendar, Share2, Check, Database } from 'lucide-react';
 import { isNeonConfigured } from '../db';
 
 interface NavbarProps {
   sessionTitle?: string;
   onNavigateHome?: () => void;
-  onNavigateDashboard?: () => void;
-  isDashboardActive?: boolean;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   sessionTitle,
   onNavigateHome,
-  onNavigateDashboard,
-  isDashboardActive,
 }) => {
   const [copied, setCopied] = useState(false);
 
@@ -48,19 +44,6 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Action Controls */}
         <div className="flex items-center space-x-2">
-          {/* Dashboard Navigation Link */}
-          <button
-            onClick={onNavigateDashboard}
-            className={`flex items-center space-x-1.5 text-xs font-bold px-3 py-1.5 rounded-xl border transition-all ${
-              isDashboardActive
-                ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
-                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
-            }`}
-          >
-            <BarChart3 className="w-3.5 h-3.5 text-indigo-500" />
-            <span>Dashboard</span>
-          </button>
-
           <div 
             title={isNeonConfigured ? "Connected to Neon DB Postgres" : "Local Browser Storage Active"}
             className={`hidden sm:flex items-center space-x-1 text-[10px] font-bold px-2 py-0.5 rounded-full border transition-all ${

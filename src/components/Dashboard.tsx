@@ -38,6 +38,7 @@ export function Dashboard({ onNavigateHome }: DashboardProps) {
   const [feedFilter, setFeedFilter] = useState<string>('all');
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [isResetting, setIsResetting] = useState<boolean>(false);
 
   const loadData = async () => {
     setIsRefreshing(true);
@@ -68,11 +69,18 @@ export function Dashboard({ onNavigateHome }: DashboardProps) {
     setLastRefreshed(new Date());
   };
 
-  const handleClear = () => {
-    if (confirm('Сигурни ли сте, че искате да изчистите логовете на статистиката?')) {
-      clearAnalyticsData();
-      setEvents([]);
-      setLastRefreshed(new Date());
+  const handleClear = async () => {
+    if (confirm('Сигурни ли сте, че искате да нулирате всички Dashboard данни и логове?')) {
+      setIsResetting(true);
+      try {
+        await clearAnalyticsData();
+        setEvents([]);
+        setLastRefreshed(new Date());
+      } catch (err) {
+        console.error('Failed resetting analytics data:', err);
+      } finally {
+        setIsResetting(false);
+      }
     }
   };
 
@@ -91,9 +99,43 @@ export function Dashboard({ onNavigateHome }: DashboardProps) {
     });
   }, [events, timeFilter]);
 
+  // Deduplicated Page Views (15-minute window per user)
+  const deduplicatedPageViews = useMemo(() => {
+    const pvEvents = filteredEvents.filter(e => e.eventType === 'page_view');
+    // Group events by userId or session/id
+    const userGroups = new Map<string, AnalyticsEvent[]>();
+
+    pvEvents.forEach(ev => {
+      const uKey = ev.metadata?.userId || ev.metadata?.referrer || ev.id;
+      if (!userGroups.has(uKey)) {
+        userGroups.set(uKey, []);
+      }
+      userGroups.get(uKey)!.push(ev);
+    });
+
+    const validPageViews: AnalyticsEvent[] = [];
+    const FIFTEEN_MINUTES = 15 * 60 * 1000;
+
+    userGroups.forEach(group => {
+      // Sort chronologically
+      group.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+      let lastTime = 0;
+
+      group.forEach(ev => {
+        const ts = new Date(ev.timestamp).getTime();
+        if (ts - lastTime >= FIFTEEN_MINUTES) {
+          validPageViews.push(ev);
+          lastTime = ts;
+        }
+      });
+    });
+
+    return validPageViews;
+  }, [filteredEvents]);
+
   // Key Performance Indicators
   const kpis = useMemo(() => {
-    const pageViews = filteredEvents.filter(e => e.eventType === 'page_view').length;
+    const pageViews = deduplicatedPageViews.length;
     const sessionsCreated = filteredEvents.filter(e => e.eventType === 'session_created').length;
     const availabilitySaved = filteredEvents.filter(e => e.eventType === 'availability_saved').length;
     const slotFinalized = filteredEvents.filter(e => e.eventType === 'slot_finalized').length;
@@ -107,13 +149,14 @@ export function Dashboard({ onNavigateHome }: DashboardProps) {
       slotFinalized,
       finalizationRate,
     };
-  }, [filteredEvents]);
+  }, [filteredEvents, deduplicatedPageViews]);
 
   // Live Activity Feed Filtered
   const liveFeedEvents = useMemo(() => {
     if (feedFilter === 'all') return filteredEvents;
+    if (feedFilter === 'page_view') return deduplicatedPageViews;
     return filteredEvents.filter(e => e.eventType === feedFilter);
-  }, [filteredEvents, feedFilter]);
+  }, [filteredEvents, feedFilter, deduplicatedPageViews]);
 
   // Distribution & Activity Over Time Calculation
   const timeChartData = useMemo(() => {
@@ -139,11 +182,11 @@ export function Dashboard({ onNavigateHome }: DashboardProps) {
       buckets[key] = { label, views: 0, actions: 0 };
     }
 
-    filteredEvents.forEach(e => {
+    // Process deduplicated page views for traffic bars
+    deduplicatedPageViews.forEach(e => {
       const d = new Date(e.timestamp);
       let key = '';
       if (is24h) {
-        // Group by 2-hour slots
         const hour = Math.floor(d.getHours() / 2) * 2;
         d.setHours(hour, 0, 0, 0);
         key = format(d, 'yyyy-MM-dd HH:00');
@@ -152,11 +195,24 @@ export function Dashboard({ onNavigateHome }: DashboardProps) {
       }
 
       if (buckets[key]) {
-        if (e.eventType === 'page_view') {
-          buckets[key].views++;
-        } else {
-          buckets[key].actions++;
-        }
+        buckets[key].views++;
+      }
+    });
+
+    // Process action events for activity bars
+    filteredEvents.filter(e => e.eventType !== 'page_view').forEach(e => {
+      const d = new Date(e.timestamp);
+      let key = '';
+      if (is24h) {
+        const hour = Math.floor(d.getHours() / 2) * 2;
+        d.setHours(hour, 0, 0, 0);
+        key = format(d, 'yyyy-MM-dd HH:00');
+      } else {
+        key = format(d, 'yyyy-MM-dd');
+      }
+
+      if (buckets[key]) {
+        buckets[key].actions++;
       }
     });
 
@@ -164,7 +220,7 @@ export function Dashboard({ onNavigateHome }: DashboardProps) {
     const maxVal = Math.max(1, ...list.map(b => b.views + b.actions));
 
     return { list, maxVal };
-  }, [filteredEvents, timeFilter]);
+  }, [filteredEvents, deduplicatedPageViews, timeFilter]);
 
   const getEventBadge = (type: AnalyticsEventType) => {
     switch (type) {
@@ -249,6 +305,16 @@ export function Dashboard({ onNavigateHome }: DashboardProps) {
               title="Ръчно опресняване"
             >
               <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-indigo-400' : ''}`} />
+            </button>
+
+            <button
+              onClick={handleClear}
+              disabled={isResetting}
+              className="px-3.5 py-2.5 bg-rose-600/90 hover:bg-rose-600 active:scale-95 text-white border border-rose-500/40 rounded-2xl transition-all text-xs font-bold flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+              title="Нулиране на Dashboard данните"
+            >
+              <Trash2 className="w-4 h-4 text-rose-100" />
+              <span>{isResetting ? 'Нулиране...' : 'Нулирай данните'}</span>
             </button>
           </div>
         </div>
@@ -504,10 +570,11 @@ export function Dashboard({ onNavigateHome }: DashboardProps) {
 
             <button
               onClick={handleClear}
-              className="px-3 py-2 text-slate-400 hover:text-rose-600 font-semibold rounded-xl hover:bg-rose-50 transition-colors flex items-center gap-1"
+              disabled={isResetting}
+              className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-xl border border-rose-200 transition-colors flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
             >
-              <Trash2 className="w-3.5 h-3.5" />
-              Изчисти
+              <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+              {isResetting ? 'Нулиране...' : 'Нулирай Dashboard Данните'}
             </button>
           </div>
         </div>

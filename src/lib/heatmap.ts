@@ -71,57 +71,88 @@ export function findBestSlotWindows(
 ): BestSlotWindow[] {
   if (totalParticipants === 0) return [];
 
-  const windows: BestSlotWindow[] = [];
-  const targetSlotsCount = Math.max(1, Math.round(minDurationMinutes / 30));
+  const getWindowsForDuration = (durationMins: number): BestSlotWindow[] => {
+    const windows: BestSlotWindow[] = [];
+    const targetSlotsCount = Math.max(1, Math.round(durationMins / 30));
 
-  Object.entries(slotsByDate).forEach(([dateKey, slots]) => {
-    if (slots.length < targetSlotsCount) return;
+    Object.entries(slotsByDate).forEach(([dateKey, slots]) => {
+      if (slots.length < targetSlotsCount) return;
 
-    for (let i = 0; i <= slots.length - targetSlotsCount; i++) {
-      const subSlots = slots.slice(i, i + targetSlotsCount);
-      let windowMinAvailable = totalParticipants;
-      let windowPreferredSum = 0;
-      const participantSet = new Set<string>();
+      for (let i = 0; i <= slots.length - targetSlotsCount; i++) {
+        const subSlots = slots.slice(i, i + targetSlotsCount);
+        let windowMinAvailable = totalParticipants;
+        let windowPreferredSum = 0;
+        let totalSlotVotes = 0;
+        const participantSet = new Set<string>();
 
-      subSlots.forEach(s => {
-        const hData = heatmapMap[s.isoStart];
-        if (hData) {
-          windowMinAvailable = Math.min(windowMinAvailable, hData.availableCount);
-          windowPreferredSum += hData.preferredCount;
-          hData.participants.forEach(p => participantSet.add(p.name));
-        } else {
-          windowMinAvailable = 0;
+        subSlots.forEach(s => {
+          const hData = heatmapMap[s.isoStart];
+          if (hData) {
+            windowMinAvailable = Math.min(windowMinAvailable, hData.availableCount);
+            windowPreferredSum += hData.preferredCount;
+            totalSlotVotes += hData.availableCount;
+            hData.participants.forEach(p => participantSet.add(p.name));
+          } else {
+            windowMinAvailable = 0;
+          }
+        });
+
+        // Filter out windows where no participant selected any slot
+        if (participantSet.size === 0 || totalSlotVotes === 0) {
+          continue;
         }
-      });
 
-      const firstSlot = subSlots[0];
-      const lastSlot = subSlots[subSlots.length - 1];
+        const firstSlot = subSlots[0];
+        const lastSlot = subSlots[subSlots.length - 1];
 
-      const startDateObj = parseISO(firstSlot.isoStart);
-      const endDateObj = parseISO(lastSlot.isoEnd);
+        const startDateObj = parseISO(firstSlot.isoStart);
+        const endDateObj = parseISO(lastSlot.isoEnd);
 
-      windows.push({
-        startDate: dateKey,
-        startSlot: firstSlot.isoStart,
-        endSlot: lastSlot.isoEnd,
-        displayDate: format(startDateObj, 'EEEE, MMM d, yyyy'),
-        displayTime: `${format(startDateObj, 'h:mm a')} – ${format(endDateObj, 'h:mm a')}`,
-        durationMinutes: targetSlotsCount * 30,
-        totalScore: windowMinAvailable, // Based purely on attendance count
-        availableCount: windowMinAvailable,
-        totalParticipants,
-        participantNames: Array.from(participantSet),
-      });
+        windows.push({
+          startDate: dateKey,
+          startSlot: firstSlot.isoStart,
+          endSlot: lastSlot.isoEnd,
+          displayDate: format(startDateObj, 'EEEE, MMM d, yyyy'),
+          displayTime: `${format(startDateObj, 'h:mm a')} – ${format(endDateObj, 'h:mm a')}`,
+          durationMinutes: targetSlotsCount * 30,
+          totalScore: windowMinAvailable * 10 + windowPreferredSum,
+          availableCount: windowMinAvailable,
+          totalParticipants,
+          participantNames: Array.from(participantSet),
+        });
+      }
+    });
+
+    return windows;
+  };
+
+  let candidates = getWindowsForDuration(minDurationMinutes);
+
+  // If no candidates found for requested duration or all candidates have 0 full-duration availableCount,
+  // check shorter durations (down to 30m) to find actual selected slots with attendance > 0
+  if (candidates.length === 0 || candidates.every(w => w.availableCount === 0)) {
+    const fallbackDurations = [120, 90, 60, 30].filter(d => d < minDurationMinutes);
+    for (const fallbackDur of fallbackDurations) {
+      const fallbackCandidates = getWindowsForDuration(fallbackDur);
+      if (fallbackCandidates.length > 0) {
+        const hasBetterAttendance = fallbackCandidates.some(w => w.availableCount > 0);
+        if (hasBetterAttendance || candidates.length === 0) {
+          candidates = fallbackCandidates;
+          if (hasBetterAttendance) break;
+        }
+      }
     }
-  });
+  }
 
-  // Sort strictly by highest available participant count first
-  windows.sort((a, b) => {
+  // Sort strictly by:
+  // 1. Highest available participant count for the window
+  // 2. Highest total score
+  candidates.sort((a, b) => {
     if (b.availableCount !== a.availableCount) {
       return b.availableCount - a.availableCount;
     }
     return b.totalScore - a.totalScore;
   });
 
-  return windows.slice(0, 5);
+  return candidates.slice(0, 5);
 }

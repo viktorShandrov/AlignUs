@@ -1,6 +1,7 @@
 import { db, isNeonConfigured } from '../db';
 import { analyticsEvents } from '../db/schema';
 import { desc } from 'drizzle-orm';
+import { getOrCreateUserId } from './user';
 
 export type AnalyticsEventType =
   | 'page_view'
@@ -42,11 +43,12 @@ export async function trackEvent(
   path: string = window.location.pathname,
   metadata?: Record<string, any>
 ): Promise<AnalyticsEvent> {
+  const userId = getOrCreateUserId();
   const event: AnalyticsEvent = {
     id: crypto.randomUUID(),
     eventType,
     path,
-    metadata,
+    metadata: { userId, ...metadata },
     timestamp: new Date().toISOString(),
   };
 
@@ -72,14 +74,17 @@ export async function trackEvent(
 }
 
 export function trackPageView(path: string = window.location.pathname) {
-  // Prevent duplicate page view tracking within 1 second for same path
-  const lastTracked = sessionStorage.getItem('last_pv_' + path);
+  const userId = getOrCreateUserId();
+  const FIFTEEN_MINUTES = 15 * 60 * 1000;
+  const storageKey = `last_pv_${userId}_${path}`;
+  const lastTracked = localStorage.getItem(storageKey);
   const now = Date.now();
-  if (lastTracked && now - parseInt(lastTracked, 10) < 1000) {
+
+  if (lastTracked && now - parseInt(lastTracked, 10) < FIFTEEN_MINUTES) {
     return;
   }
-  sessionStorage.setItem('last_pv_' + path, now.toString());
-  trackEvent('page_view', path, { referrer: document.referrer || 'direct' });
+  localStorage.setItem(storageKey, now.toString());
+  trackEvent('page_view', path, { userId, referrer: document.referrer || 'direct' });
 }
 
 export async function fetchAnalyticsEvents(): Promise<AnalyticsEvent[]> {
@@ -116,7 +121,9 @@ export async function fetchAnalyticsEvents(): Promise<AnalyticsEvent[]> {
     (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
   );
 
-  if (merged.length === 0) {
+  const isCleared = localStorage.getItem('syncmeet_analytics_cleared') === 'true';
+
+  if (merged.length === 0 && !isCleared) {
     return seedDemoAnalyticsData();
   }
 
@@ -181,10 +188,19 @@ export function seedDemoAnalyticsData(): AnalyticsEvent[] {
   }
 
   events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  localStorage.removeItem('syncmeet_analytics_cleared');
   saveLocalEvents(events);
   return events;
 }
 
-export function clearAnalyticsData(): void {
+export async function clearAnalyticsData(): Promise<void> {
   localStorage.removeItem(LOCAL_ANALYTICS_KEY);
+  localStorage.setItem('syncmeet_analytics_cleared', 'true');
+  if (isNeonConfigured && db) {
+    try {
+      await db.delete(analyticsEvents);
+    } catch (err) {
+      console.warn('Neon DB clearAnalyticsData failed:', err);
+    }
+  }
 }
