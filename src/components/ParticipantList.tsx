@@ -81,11 +81,14 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
 
       {/* Roster Header */}
       <div className="flex items-center justify-between">
-        <h3 className="text-[11px] font-bold text-slate-800 flex items-center gap-1 uppercase tracking-wider">
-          <Users className="w-3.5 h-3.5 text-indigo-600" />
-          <span>Участници в срещата ({participants.length})</span>
+        <h3 className="text-xs font-bold text-slate-800 flex items-center gap-1.5 uppercase tracking-wider">
+          <Users className="w-4 h-4 text-indigo-600" />
+          <span>Активни участници</span>
+          <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-indigo-100 text-indigo-700 border border-indigo-200 ml-1">
+            {participants.length} {participants.length === 1 ? 'въведено име' : 'въведени имена'}
+          </span>
         </h3>
-        <span className="text-[10px] text-slate-400 font-semibold">Hover to highlight</span>
+        <span className="text-[10px] text-slate-400 font-semibold hidden xs:inline">Задръжте за подчертаване</span>
       </div>
 
       {/* Participants List */}
