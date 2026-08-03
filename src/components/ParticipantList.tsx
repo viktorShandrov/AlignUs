@@ -1,6 +1,6 @@
 import React from 'react';
 import { Participant, Availability } from '../types';
-import { Users, UserCheck, Star, UserPlus, Edit3 } from 'lucide-react';
+import { Users, UserCheck, UserPlus, Edit3 } from 'lucide-react';
 import { getParticipantColor } from '../lib/colors';
 
 interface ParticipantListProps {
@@ -25,13 +25,12 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
   onHoverParticipant,
 }) => {
   const statsByParticipant = React.useMemo(() => {
-    const stats: Record<string, { total: number; preferred: number }> = {};
+    const stats: Record<string, { total: number }> = {};
     availabilities.forEach(a => {
       if (!stats[a.participantId]) {
-        stats[a.participantId] = { total: 0, preferred: 0 };
+        stats[a.participantId] = { total: 0 };
       }
       stats[a.participantId].total += 1;
-      if (a.isPreferred) stats[a.participantId].preferred += 1;
     });
     return stats;
   }, [availabilities]);
@@ -103,7 +102,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
             const isMe =
               (p.userId && currentUserId && p.userId === currentUserId) ||
               p.name.trim().toLowerCase() === currentName.trim().toLowerCase();
-            const stat = statsByParticipant[p.id] || { total: 0, preferred: 0 };
+            const stat = statsByParticipant[p.id] || { total: 0 };
             const isHovered = hoveredParticipantId === p.id;
             const color = getParticipantColor(idx);
 
@@ -132,12 +131,6 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
                     </span>
                   )}
                   <span className="text-[10px] text-slate-400">({stat.total}s)</span>
-                  {stat.preferred > 0 && (
-                    <span className="flex items-center text-[9px] font-bold text-amber-600">
-                      <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-500" />
-                      {stat.preferred}
-                    </span>
-                  )}
                 </div>
               </div>
             );

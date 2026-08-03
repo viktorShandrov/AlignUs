@@ -141,31 +141,54 @@ export function App() {
   }, [sessionId, loading, session, currentName, isDashboard]);
 
   const handleSaveMySlots = async (
-    slots: Array<{ startSlot: string; endSlot: string; isPreferred: boolean }>
+    slots: Array<{ startSlot: string; endSlot: string; isPreferred?: boolean }>
   ) => {
     if (!sessionId || !currentName.trim()) return;
 
     lastSaveTime.current = Date.now();
 
-    // Optimistic update of local availabilities state in App.tsx
-    const myPtId = myParticipant?.id;
-    if (myPtId) {
-      const newMyAvails: Availability[] = slots.map(s => ({
-        id: crypto.randomUUID(),
-        participantId: myPtId,
-        startSlot: s.startSlot,
-        endSlot: s.endSlot,
-        isPreferred: s.isPreferred,
-      }));
+    const normalizedSlots = slots.map(s => ({
+      startSlot: s.startSlot,
+      endSlot: s.endSlot,
+      isPreferred: false,
+    }));
 
-      setAvailabilities(prevAvails => {
-        const others = prevAvails.filter(a => a.participantId !== myPtId);
-        return [...others, ...newMyAvails];
-      });
+    // Optimistic update of local participants & availabilities state in App.tsx
+    let myPtId = myParticipant?.id;
+    if (!myPtId) {
+      myPtId = crypto.randomUUID();
+      const newParticipant: Participant = {
+        id: myPtId,
+        sessionId,
+        userId,
+        name: currentName.trim(),
+        note: null,
+        createdAt: new Date().toISOString(),
+      };
+      setParticipants(prev => [...prev, newParticipant]);
     }
 
+    const newMyAvails: Availability[] = normalizedSlots.map(s => ({
+      id: crypto.randomUUID(),
+      participantId: myPtId,
+      startSlot: s.startSlot,
+      endSlot: s.endSlot,
+      isPreferred: false,
+    }));
+
+    setAvailabilities(prevAvails => {
+      const others = prevAvails.filter(a => a.participantId !== myPtId);
+      return [...others, ...newMyAvails];
+    });
+
+    // 5-second timeout for server save
+    const savePromise = saveParticipantAvailability(sessionId, userId, currentName.trim(), normalizedSlots);
+    const timeoutPromise = new Promise<{ participant: Participant; availabilitiesCount: number }>((_, reject) => {
+      setTimeout(() => reject(new Error('Връзката със сървъра отне повече от 5 секунди. Моля, опитайте отново.')), 5000);
+    });
+
     try {
-      const result = await saveParticipantAvailability(sessionId, userId, currentName.trim(), slots);
+      const result = await Promise.race([savePromise, timeoutPromise]);
       if (result.participant) {
         setParticipants(prev => {
           const exists = prev.some(p => p.id === result.participant.id);
@@ -177,7 +200,6 @@ export function App() {
       }
     } catch (err) {
       console.error('Failed saving availability:', err);
-      await loadSessionData();
       throw err;
     }
   };

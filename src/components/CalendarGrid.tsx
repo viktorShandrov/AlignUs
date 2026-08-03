@@ -6,7 +6,7 @@ import { getGoogleCalendarUrl } from '../lib/calendarExport';
 import { Star, Sparkles, Check, Eye, Edit3, Trash2, Zap, Award, Clock, Lock, ExternalLink, Layers, X, CheckCircle2, Copy, Loader2, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface SelectedSlotState {
-  isPreferred: boolean;
+  isPreferred?: boolean;
 }
 
 interface CalendarGridProps {
@@ -15,7 +15,7 @@ interface CalendarGridProps {
   participants: Participant[];
   currentParticipantName: string;
   mySelectedSlots: Record<string, SelectedSlotState>;
-  onSaveMySlots: (slots: Array<{ startSlot: string; endSlot: string; isPreferred: boolean }>) => Promise<void>;
+  onSaveMySlots: (slots: Array<{ startSlot: string; endSlot: string; isPreferred?: boolean }>) => Promise<void>;
   hoveredParticipantId?: string | null;
   sessionTitle: string;
   bestWindows: BestSlotWindow[];
@@ -42,7 +42,6 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
 }) => {
   const [viewMode, setViewMode] = useState<'edit' | 'heatmap'>('edit');
   const [slotState, setSlotState] = useState<Record<string, SelectedSlotState>>(mySelectedSlots);
-  const [isPreferredMode, setIsPreferredMode] = useState<boolean>(false);
   const [hoveredSlotKey, setHoveredSlotKey] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -83,12 +82,12 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
       setSaveStatus('saving');
       setSaveError(null);
 
-      const formattedSlots = Object.entries(currentState).map(([isoStart, state]) => {
+      const formattedSlots = Object.entries(currentState).map(([isoStart]) => {
         const endMs = new Date(isoStart).getTime() + 30 * 60 * 1000;
         return {
           startSlot: isoStart,
           endSlot: new Date(endMs).toISOString(),
-          isPreferred: state.isPreferred,
+          isPreferred: false,
         };
       });
 
@@ -98,11 +97,11 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
         setSaveStatus('saved');
         setTimeout(() => {
           setSaveStatus(prev => (prev === 'saved' ? 'idle' : prev));
-        }, 1000);
+        }, 1500);
       } catch (err: any) {
         console.error('Failed saving availability:', err);
         setSaveStatus('error');
-        setSaveError(err?.message || 'Failed to save selections to server. Please try again.');
+        setSaveError(err?.message || 'Възникна проблем при запазването на часовете (изтече времето за връзка).');
       }
     },
     [currentParticipantName, onSaveMySlots]
@@ -114,31 +113,17 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
     hasModifiedState.current = true;
 
     const existing = slotState[isoStart];
-    let nextState: Record<string, SelectedSlotState> = {};
+    dragMode.current = existing ? 'remove' : 'add';
 
-    if (isPreferredMode) {
-      dragMode.current = existing?.isPreferred ? 'remove' : 'add';
-      setSlotState(prev => {
-        nextState = { ...prev };
-        if (existing?.isPreferred) {
-          nextState[isoStart] = { isPreferred: false };
-        } else {
-          nextState[isoStart] = { isPreferred: true };
-        }
-        return nextState;
-      });
-    } else {
-      dragMode.current = existing ? 'remove' : 'add';
-      setSlotState(prev => {
-        nextState = { ...prev };
-        if (dragMode.current === 'remove') {
-          delete nextState[isoStart];
-        } else {
-          nextState[isoStart] = { isPreferred: false };
-        }
-        return nextState;
-      });
-    }
+    setSlotState(prev => {
+      const nextState = { ...prev };
+      if (dragMode.current === 'remove') {
+        delete nextState[isoStart];
+      } else {
+        nextState[isoStart] = { isPreferred: false };
+      }
+      return nextState;
+    });
   };
 
   const handleMouseEnter = (isoStart: string) => {
@@ -149,18 +134,10 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
 
     setSlotState(prev => {
       const next = { ...prev };
-      if (isPreferredMode) {
-        if (dragMode.current === 'add') {
-          next[isoStart] = { isPreferred: true };
-        } else {
-          if (next[isoStart]) next[isoStart] = { isPreferred: false };
-        }
+      if (dragMode.current === 'add') {
+        next[isoStart] = { isPreferred: false };
       } else {
-        if (dragMode.current === 'add') {
-          next[isoStart] = { isPreferred: false };
-        } else {
-          delete next[isoStart];
-        }
+        delete next[isoStart];
       }
       return next;
     });
@@ -494,70 +471,42 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
       {viewMode === 'edit' && (
         <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-50 p-2 rounded-lg border border-slate-200 text-xs">
           <div className="flex items-center space-x-1.5">
-            <span className="text-[11px] text-slate-500 font-semibold hidden xs:inline">Mode:</span>
-            <button
-              type="button"
-              onClick={() => setIsPreferredMode(false)}
-              className={`flex items-center space-x-1 px-2.5 py-1 rounded-md text-[11px] font-bold transition-all ${
-                !isPreferredMode
-                  ? 'bg-indigo-100 text-indigo-800 border border-indigo-300'
-                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
-              }`}
-            >
+            <div className="flex items-center space-x-1 px-2.5 py-1 rounded-md text-[11px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-300">
               <div className="w-2 h-2 rounded-xs bg-indigo-600" />
-              <span>Available</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsPreferredMode(true)}
-              className={`flex items-center space-x-1 px-2.5 py-1 rounded-md text-[11px] font-bold transition-all ${
-                isPreferredMode
-                  ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
-              }`}
-            >
-              <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
-              <span>Preferred ⭐</span>
-            </button>
+              <span>Свободен час / Available</span>
+            </div>
           </div>
 
           <div className="flex items-center space-x-2">
             {currentParticipantName.trim() ? (
-              <div className={`flex items-center space-x-1 text-[11px] font-bold px-2 py-0.5 rounded border transition-all ${
-                saveStatus === 'saving'
-                  ? 'bg-amber-50 text-amber-700 border-amber-200'
-                  : saveStatus === 'saved'
+              <div className={`flex items-center space-x-1 text-[11px] font-bold px-2 py-0.5 rounded border transition-all duration-200 ${
+                saveStatus === 'saved'
                   ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                   : saveStatus === 'error'
                   ? 'bg-rose-50 text-rose-700 border-rose-200'
                   : 'bg-white text-slate-600 border-slate-200'
               }`}>
-                {saveStatus === 'saving' ? (
-                  <>
-                    <Loader2 className="w-3 h-3 text-amber-600 animate-spin" />
-                    <span>Syncing...</span>
-                  </>
-                ) : saveStatus === 'saved' ? (
+                {saveStatus === 'saved' ? (
                   <>
                     <Check className="w-3 h-3 text-emerald-600 stroke-[3]" />
-                    <span>Auto-saved ✓</span>
+                    <span>Запазено ✓</span>
                   </>
                 ) : saveStatus === 'error' ? (
                   <>
                     <AlertCircle className="w-3 h-3 text-rose-600" />
-                    <span>Save failed</span>
+                    <span>Грешка при запазване</span>
                   </>
                 ) : (
                   <>
                     <Zap className="w-3 h-3 text-indigo-600" />
-                    <span className="text-slate-500 hidden sm:inline">Drag to select</span>
-                    <span className="text-slate-500 sm:hidden">Drag / Tap</span>
+                    <span className="text-slate-500 hidden sm:inline">Плъзнете за избор / Drag to select</span>
+                    <span className="text-slate-500 sm:hidden">Избор / Select</span>
                   </>
                 )}
               </div>
             ) : (
               <span className="text-[10px] text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 font-medium">
-                Type name to save
+                Въведете име за запазване
               </span>
             )}
 
@@ -566,7 +515,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
               className="flex items-center space-x-1 text-[11px] text-slate-500 hover:text-rose-600 px-1.5 py-0.5 rounded hover:bg-rose-50 transition-colors"
             >
               <Trash2 className="w-3 h-3" />
-              <span>Clear</span>
+              <span>Изчисти</span>
             </button>
           </div>
         </div>
@@ -583,7 +532,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
             onClick={() => performSave(slotState)}
             className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-2.5 py-1 rounded-md text-[11px] transition-colors shadow-2xs"
           >
-            Retry Save
+            Опитай отново / Retry
           </button>
         </div>
       )}
@@ -642,7 +591,6 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
 
                   if (viewMode === 'edit') {
                     const isSel = Boolean(myState);
-                    const isPref = myState?.isPreferred;
 
                     return (
                       <div
@@ -651,17 +599,13 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                         onMouseDown={() => handleMouseDown(iso)}
                         onMouseEnter={() => handleMouseEnter(iso)}
                         onTouchStart={e => handleTouchStart(iso, e)}
-                        className={`h-8 rounded-md border transition-all cursor-pointer flex items-center justify-between px-1.5 relative select-none ${
-                          isPref
-                            ? 'bg-amber-100 border-amber-400 text-amber-900 shadow-2xs font-bold'
-                            : isSel
+                        className={`h-8 rounded-md border transition-all duration-150 ease-out cursor-pointer flex items-center justify-between px-1.5 relative select-none ${
+                          isSel
                             ? 'bg-indigo-100 border-indigo-500 text-indigo-900 shadow-2xs font-bold'
                             : 'bg-white border-slate-200 hover:bg-slate-100'
                         }`}
                       >
-                        {isPref ? (
-                          <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
-                        ) : isSel ? (
+                        {isSel ? (
                           <div className="w-2 h-2 rounded-full bg-indigo-600 shadow-xs" />
                         ) : (
                           <div />
@@ -675,17 +619,10 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                               return (
                                 <span
                                   key={p.participantId}
-                                  title={`${p.name}${p.isPreferred ? ' ⭐ (Preferred)' : ''}`}
-                                  className={`w-4 h-4 rounded-full ${pColor.bg} flex items-center justify-center text-[8px] font-black text-white shadow-xs ring-1 ring-white flex-shrink-0 relative ${
-                                    p.isPreferred ? 'ring-2 ring-amber-400' : ''
-                                  }`}
+                                  title={p.name}
+                                  className={`w-4 h-4 rounded-full ${pColor.bg} flex items-center justify-center text-[8px] font-black text-white shadow-xs ring-1 ring-white flex-shrink-0 relative`}
                                 >
                                   {p.name.charAt(0).toUpperCase()}
-                                  {p.isPreferred && (
-                                    <span className="absolute -top-1 -right-0.5 text-[8px] text-amber-400 font-black">
-                                      ★
-                                    </span>
-                                  )}
                                 </span>
                               );
                             })}
@@ -738,17 +675,10 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                               return (
                                 <span
                                   key={p.participantId}
-                                  title={`${p.name}${p.isPreferred ? ' ⭐ (Preferred)' : ''}`}
-                                  className={`w-4 h-4 rounded-full ${pColor.bg} flex items-center justify-center text-[8px] font-black text-white shadow-xs ring-1 ring-white flex-shrink-0 relative ${
-                                    p.isPreferred ? 'ring-2 ring-amber-400' : ''
-                                  }`}
+                                  title={p.name}
+                                  className={`w-4 h-4 rounded-full ${pColor.bg} flex items-center justify-center text-[8px] font-black text-white shadow-xs ring-1 ring-white flex-shrink-0 relative`}
                                 >
                                   {p.name.charAt(0).toUpperCase()}
-                                  {p.isPreferred && (
-                                    <span className="absolute -top-1 -right-0.5 text-[8px] text-amber-400 font-black">
-                                      ★
-                                    </span>
-                                  )}
                                 </span>
                               );
                             })}
@@ -786,7 +716,6 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                 >
                   <div className={`w-2 h-2 rounded-full ${pColor.bg}`} />
                   <span>{p.name}</span>
-                  {p.isPreferred && <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />}
                 </span>
               );
             })}
