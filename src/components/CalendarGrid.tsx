@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { DateRangeConfig, HeatmapSlotData, Participant, BestSlotWindow, FinalizedSlot } from '../types';
 import { generateSlotsForRange } from '../lib/dateUtils';
 import { getParticipantColor } from '../lib/colors';
-import { getGoogleCalendarUrl, downloadIcalFile } from '../lib/calendarExport';
-import { Star, Sparkles, Check, Eye, Edit3, Trash2, Zap, Award, Clock, Users, Lock, ExternalLink, Download, Layers, X, CheckCircle2, Copy, Loader2, AlertCircle } from 'lucide-react';
+import { getGoogleCalendarUrl } from '../lib/calendarExport';
+import { Star, Sparkles, Check, Eye, Edit3, Trash2, Zap, Award, Clock, Lock, ExternalLink, Layers, X, CheckCircle2, Copy, Loader2, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface SelectedSlotState {
   isPreferred: boolean;
@@ -48,10 +48,12 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [selectedDateFilter, setSelectedDateFilter] = useState<string>('all');
 
   const isDragging = useRef<boolean>(false);
   const dragMode = useRef<'add' | 'remove'>('add');
   const hasModifiedState = useRef<boolean>(false);
+  const activeTouchSlot = useRef<string | null>(null);
 
   const participantColorMap = React.useMemo(() => {
     const map: Record<string, ReturnType<typeof getParticipantColor>> = {};
@@ -69,6 +71,11 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   }, [mySelectedSlots, saveStatus]);
 
   const { dates, slotsByDate } = generateSlotsForRange(dateRange);
+
+  const visibleDates = React.useMemo(() => {
+    if (selectedDateFilter === 'all') return dates;
+    return dates.filter(d => d.dateKey === selectedDateFilter);
+  }, [dates, selectedDateFilter]);
 
   const performSave = React.useCallback(
     async (currentState: Record<string, SelectedSlotState>) => {
@@ -158,6 +165,47 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
     });
   };
 
+  // Touch Gesture Handling for Mobile Devices
+  const handleTouchStart = (isoStart: string, e: React.TouchEvent) => {
+    if (viewMode !== 'edit') return;
+    activeTouchSlot.current = isoStart;
+    handleMouseDown(isoStart);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isDragging.current || viewMode !== 'edit') return;
+    const touch = e.touches[0];
+    if (!touch) return;
+
+    const targetElement = document.elementFromPoint(touch.clientX, touch.clientY);
+    if (!targetElement) return;
+
+    const slotEl = targetElement.closest('[data-slot-key]') as HTMLElement | null;
+    if (slotEl) {
+      const slotKey = slotEl.getAttribute('data-slot-key');
+      if (slotKey && slotKey !== activeTouchSlot.current) {
+        activeTouchSlot.current = slotKey;
+        handleMouseEnter(slotKey);
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    activeTouchSlot.current = null;
+    if (isDragging.current && hasModifiedState.current) {
+      isDragging.current = false;
+      hasModifiedState.current = false;
+
+      setSlotState(latest => {
+        performSave(latest);
+        return latest;
+      });
+    } else {
+      isDragging.current = false;
+      hasModifiedState.current = false;
+    }
+  };
+
   useEffect(() => {
     const handleGlobalMouseUp = () => {
       if (isDragging.current && hasModifiedState.current) {
@@ -207,6 +255,32 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
     if (onFinalizeSlot) onFinalizeSlot(null);
   };
 
+  const navigateDateFilter = (direction: 'prev' | 'next') => {
+    if (selectedDateFilter === 'all') {
+      if (dates.length > 0) {
+        setSelectedDateFilter(direction === 'next' ? dates[0].dateKey : dates[dates.length - 1].dateKey);
+      }
+      return;
+    }
+
+    const currentIndex = dates.findIndex(d => d.dateKey === selectedDateFilter);
+    if (currentIndex === -1) return;
+
+    if (direction === 'prev') {
+      if (currentIndex > 0) {
+        setSelectedDateFilter(dates[currentIndex - 1].dateKey);
+      } else {
+        setSelectedDateFilter('all');
+      }
+    } else {
+      if (currentIndex < dates.length - 1) {
+        setSelectedDateFilter(dates[currentIndex + 1].dateKey);
+      } else {
+        setSelectedDateFilter('all');
+      }
+    }
+  };
+
   const topPick = bestWindows[0];
   const totalParticipants = participants.length;
   const isFullAttendance = topPick ? topPick.availableCount === totalParticipants : false;
@@ -223,22 +297,24 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   const hoveredSlotInfo = hoveredSlotKey ? heatmapMap[hoveredSlotKey] : null;
 
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-3 sm:p-4 shadow-sm space-y-3">
-      {/* Option B: Embedded Header Card inside the Calendar Grid Header */}
+    <div className="bg-white border border-slate-200 rounded-2xl p-2.5 sm:p-4 shadow-sm space-y-3 max-w-full overflow-hidden">
+      {/* Embedded Header Card inside the Calendar Grid Header */}
       <div className="space-y-3 pb-3 border-b border-slate-100">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <h2 className="text-sm font-extrabold text-slate-900 flex items-center gap-1.5">
-            <span>Availability Grid</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 font-semibold border border-slate-200">
-              30m
-            </span>
-          </h2>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div className="flex items-center space-x-2">
+            <h2 className="text-sm font-extrabold text-slate-900 flex items-center gap-1.5">
+              <span>Availability Grid</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 font-semibold border border-slate-200">
+                30m
+              </span>
+            </h2>
+          </div>
 
           {/* View Mode Switcher */}
-          <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 self-start sm:self-auto">
+          <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 self-start sm:self-auto w-full sm:w-auto">
             <button
               onClick={() => setViewMode('edit')}
-              className={`flex items-center space-x-1 px-2.5 py-1 rounded-md text-[11px] font-bold transition-all ${
+              className={`flex-1 sm:flex-none flex items-center justify-center space-x-1 px-2.5 py-1.5 sm:py-1 rounded-md text-[11px] font-bold transition-all ${
                 viewMode === 'edit'
                   ? 'bg-indigo-600 text-white shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -249,7 +325,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
             </button>
             <button
               onClick={() => setViewMode('heatmap')}
-              className={`flex items-center space-x-1 px-2.5 py-1 rounded-md text-[11px] font-bold transition-all ${
+              className={`flex-1 sm:flex-none flex items-center justify-center space-x-1 px-2.5 py-1.5 sm:py-1 rounded-md text-[11px] font-bold transition-all ${
                 viewMode === 'heatmap'
                   ? 'bg-indigo-600 text-white shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -261,9 +337,9 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
           </div>
         </div>
 
-        {/* Option B Embedded Top Recommendation Header Card */}
+        {/* Embedded Recommendation Header Card */}
         {finalizedSlot ? (
-          <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-white border-2 border-emerald-400 rounded-xl p-2.5 flex items-center justify-between gap-2 shadow-2xs animate-fadeIn">
+          <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-white border-2 border-emerald-400 rounded-xl p-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-2xs animate-fadeIn">
             <div className="flex items-center space-x-2 min-w-0">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
               <div className="min-w-0">
@@ -275,25 +351,25 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                 </p>
               </div>
             </div>
-            <div className="flex items-center space-x-1 flex-shrink-0">
+            <div className="flex items-center space-x-1.5 flex-shrink-0 self-end sm:self-auto">
               <a
                 href={getGoogleCalendarUrl(sessionTitle, finalizedSlot.startSlot, finalizedSlot.endSlot, `SyncMeet finalized meeting`)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center space-x-1 bg-emerald-600 text-white text-[11px] font-bold px-2.5 py-1 rounded-lg"
+                className="flex items-center space-x-1 bg-emerald-600 text-white text-[11px] font-bold px-2.5 py-1 rounded-lg shadow-2xs"
               >
                 <ExternalLink className="w-3 h-3" />
                 <span>Google Cal</span>
               </a>
               {onFinalizeSlot && (
-                <button onClick={handleUnlock} className="text-[10px] text-slate-500 underline font-semibold">
+                <button onClick={handleUnlock} className="text-[10px] text-slate-500 underline font-semibold px-1">
                   Edit
                 </button>
               )}
             </div>
           </div>
         ) : topPick && totalParticipants > 0 ? (
-          <div className="bg-indigo-50/70 border border-indigo-200 rounded-xl p-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-2xs animate-fadeIn">
+          <div className="bg-indigo-50/70 border border-indigo-200 rounded-xl p-2.5 flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 shadow-2xs animate-fadeIn">
             <div className="flex items-center space-x-2 min-w-0">
               <div className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center text-white flex-shrink-0 shadow-2xs">
                 <Award className="w-4 h-4" />
@@ -314,7 +390,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
             </div>
 
             {/* Embedded Action Controls */}
-            <div className="flex items-center space-x-1.5 flex-shrink-0">
+            <div className="flex flex-wrap items-center justify-between sm:justify-start gap-1.5 flex-shrink-0">
               {/* Duration Switcher */}
               <div className="flex items-center space-x-0.5 bg-white p-0.5 rounded-md border border-slate-200">
                 {[30, 60, 90, 120].map(mins => (
@@ -332,47 +408,96 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                 ))}
               </div>
 
-              <a
-                href={googleUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center space-x-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-1 px-2.5 rounded-lg shadow-2xs transition-all"
-              >
-                <ExternalLink className="w-3 h-3" />
-                <span>Google Cal</span>
-              </a>
-
-              {onFinalizeSlot && (
-                <button
-                  onClick={() => handleFinalize(topPick)}
-                  className="flex items-center space-x-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs py-1 px-2.5 rounded-lg shadow-2xs transition-all"
+              <div className="flex items-center space-x-1">
+                <a
+                  href={googleUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center space-x-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-1 px-2 rounded-lg shadow-2xs transition-all"
                 >
-                  <Lock className="w-3 h-3 stroke-[2.5]" />
-                  <span>Finalize</span>
-                </button>
-              )}
+                  <ExternalLink className="w-3 h-3" />
+                  <span>Google Cal</span>
+                </a>
 
-              <button
-                onClick={() => setIsModalOpen(true)}
-                className="flex items-center space-x-1 px-2 py-1 rounded-lg bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs border border-slate-200 transition-colors shadow-2xs"
-              >
-                <Layers className="w-3 h-3 text-indigo-600" />
-                <span>More Picks ({bestWindows.length})</span>
-              </button>
+                {onFinalizeSlot && (
+                  <button
+                    onClick={() => handleFinalize(topPick)}
+                    className="flex items-center space-x-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs py-1 px-2 rounded-lg shadow-2xs transition-all"
+                  >
+                    <Lock className="w-3 h-3 stroke-[2.5]" />
+                    <span>Finalize</span>
+                  </button>
+                )}
+
+                <button
+                  onClick={() => setIsModalOpen(true)}
+                  className="flex items-center space-x-1 px-2 py-1 rounded-lg bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs border border-slate-200 transition-colors shadow-2xs"
+                >
+                  <Layers className="w-3 h-3 text-indigo-600" />
+                  <span>Picks ({bestWindows.length})</span>
+                </button>
+              </div>
             </div>
           </div>
         ) : null}
       </div>
 
+      {/* Mobile Responsive Date Selector Bar */}
+      {dates.length > 1 && (
+        <div className="flex items-center justify-between gap-1.5 bg-slate-100/80 p-1.5 rounded-xl border border-slate-200 text-xs">
+          <button
+            onClick={() => navigateDateFilter('prev')}
+            className="p-1 rounded-lg bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 transition-colors flex-shrink-0"
+            title="Previous Day"
+          >
+            <ChevronLeft className="w-3.5 h-3.5" />
+          </button>
+
+          <div className="flex items-center space-x-1 overflow-x-auto py-0.5 no-scrollbar scroll-smooth flex-1">
+            <button
+              onClick={() => setSelectedDateFilter('all')}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition-all flex-shrink-0 ${
+                selectedDateFilter === 'all'
+                  ? 'bg-indigo-600 text-white shadow-2xs'
+                  : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              All Days ({dates.length})
+            </button>
+            {dates.map(d => (
+              <button
+                key={d.dateKey}
+                onClick={() => setSelectedDateFilter(d.dateKey)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition-all flex-shrink-0 ${
+                  selectedDateFilter === d.dateKey
+                    ? 'bg-indigo-600 text-white shadow-2xs'
+                    : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                {d.dayLabel}
+              </button>
+            ))}
+          </div>
+
+          <button
+            onClick={() => navigateDateFilter('next')}
+            className="p-1 rounded-lg bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 transition-colors flex-shrink-0"
+            title="Next Day"
+          >
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Toolbar & Live Auto-save indicator */}
       {viewMode === 'edit' && (
         <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-50 p-2 rounded-lg border border-slate-200 text-xs">
           <div className="flex items-center space-x-1.5">
-            <span className="text-[11px] text-slate-500 font-semibold">Mode:</span>
+            <span className="text-[11px] text-slate-500 font-semibold hidden xs:inline">Mode:</span>
             <button
               type="button"
               onClick={() => setIsPreferredMode(false)}
-              className={`flex items-center space-x-1 px-2.5 py-0.5 rounded-md text-[11px] font-bold transition-all ${
+              className={`flex items-center space-x-1 px-2.5 py-1 rounded-md text-[11px] font-bold transition-all ${
                 !isPreferredMode
                   ? 'bg-indigo-100 text-indigo-800 border border-indigo-300'
                   : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
@@ -384,7 +509,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
             <button
               type="button"
               onClick={() => setIsPreferredMode(true)}
-              className={`flex items-center space-x-1 px-2.5 py-0.5 rounded-md text-[11px] font-bold transition-all ${
+              className={`flex items-center space-x-1 px-2.5 py-1 rounded-md text-[11px] font-bold transition-all ${
                 isPreferredMode
                   ? 'bg-amber-100 text-amber-900 border border-amber-300'
                   : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
@@ -424,7 +549,8 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                 ) : (
                   <>
                     <Zap className="w-3 h-3 text-indigo-600" />
-                    <span className="text-slate-500">Drag to select</span>
+                    <span className="text-slate-500 hidden sm:inline">Drag to select</span>
+                    <span className="text-slate-500 sm:hidden">Drag / Tap</span>
                   </>
                 )}
               </div>
@@ -461,24 +587,31 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
         </div>
       )}
 
-      {/* Grid Canvas */}
-      <div className="overflow-x-auto select-none rounded-lg border border-slate-200 bg-slate-50 p-2">
+      {/* Grid Canvas Container with Sticky Time Column and Sticky Date Headers */}
+      <div 
+        className="overflow-x-auto max-h-[65vh] select-none rounded-lg border border-slate-200 bg-slate-50 relative touch-pan-x touch-pan-y"
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
         <div
-          className="grid gap-1 min-w-[500px]"
+          className="grid gap-1 min-w-full"
           style={{
-            gridTemplateColumns: `60px repeat(${dates.length}, minmax(100px, 1fr))`,
+            gridTemplateColumns:
+              visibleDates.length === 1
+                ? '56px minmax(0, 1fr)'
+                : `56px repeat(${visibleDates.length}, minmax(80px, 1fr))`,
           }}
         >
-          {/* Top Left Header Cell */}
-          <div className="text-[11px] font-bold text-slate-400 flex items-center justify-center p-1 border-b border-slate-200">
+          {/* Top Left Pinned Corner Cell */}
+          <div className="sticky left-0 top-0 z-30 bg-slate-100 border-b border-r border-slate-200 text-[10px] font-bold text-slate-400 flex items-center justify-center p-1 shadow-2xs">
             Time
           </div>
 
-          {/* Date Column Headers */}
-          {dates.map(d => (
+          {/* Date Column Headers (Sticky Top) */}
+          {visibleDates.map(d => (
             <div
               key={d.dateKey}
-              className="text-center py-1 px-1 border-b border-slate-200 bg-white rounded-t-md shadow-2xs"
+              className="sticky top-0 z-20 text-center py-1 px-1 border-b border-slate-200 bg-white rounded-t-md shadow-2xs"
             >
               <p className="text-[11px] font-black text-slate-900">{d.dayLabel}</p>
               <p className="text-[9px] text-slate-400 font-semibold">{d.dateKey}</p>
@@ -491,13 +624,13 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
 
             return (
               <React.Fragment key={sampleSlot.timeLabel}>
-                {/* Time Label Header */}
-                <div className="text-[10px] font-mono font-bold text-slate-500 flex items-center justify-end pr-1.5 py-0.5">
+                {/* Time Label Header (Sticky Left) */}
+                <div className="sticky left-0 z-20 bg-slate-100/95 backdrop-blur-xs border-r border-slate-200 text-[10px] font-mono font-bold text-slate-500 flex items-center justify-end pr-1.5 py-0.5 shadow-2xs">
                   {sampleSlot.timeLabel}
                 </div>
 
                 {/* Day Slots */}
-                {dates.map(d => {
+                {visibleDates.map(d => {
                   const slot = slotsByDate[d.dateKey]?.[timeIndex];
                   if (!slot) return <div key={d.dateKey} />;
 
@@ -513,9 +646,11 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                     return (
                       <div
                         key={iso}
+                        data-slot-key={iso}
                         onMouseDown={() => handleMouseDown(iso)}
                         onMouseEnter={() => handleMouseEnter(iso)}
-                        className={`h-8 rounded-md border transition-all cursor-pointer flex items-center justify-between px-1.5 relative ${
+                        onTouchStart={e => handleTouchStart(iso, e)}
+                        className={`h-8 rounded-md border transition-all cursor-pointer flex items-center justify-between px-1.5 relative select-none ${
                           isPref
                             ? 'bg-amber-100 border-amber-400 text-amber-900 shadow-2xs font-bold'
                             : isSel
@@ -531,7 +666,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                           <div />
                         )}
 
-                        {/* Variant C: Overlapping Avatar Stack */}
+                        {/* Overlapping Avatar Stack */}
                         {slotParticipants.length > 0 && (
                           <div className="flex items-center -space-x-1.5 overflow-hidden">
                             {slotParticipants.map(p => {
@@ -558,7 +693,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                       </div>
                     );
                   } else {
-                    // Heatmap View Mode — Variant C: Overlapping Avatar Stack (Apple Style)
+                    // Heatmap View Mode — Overlapping Avatar Stack
                     const count = heat?.availableCount || 0;
                     const ratio = totalParticipants > 0 ? count / totalParticipants : 0;
                     const isFullMatch = totalParticipants > 0 && count === totalParticipants;
@@ -586,6 +721,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                     return (
                       <div
                         key={iso}
+                        data-slot-key={iso}
                         onMouseEnter={() => setHoveredSlotKey(iso)}
                         className={`h-8 rounded-md border transition-all flex items-center justify-between px-1.5 text-xs relative ${containerStyle}`}
                       >
@@ -593,7 +729,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                           {count > 0 ? `${count}/${totalParticipants}` : '-'}
                         </span>
 
-                        {/* Variant C: Overlapping Avatar Stack */}
+                        {/* Overlapping Avatar Stack */}
                         {slotParticipants.length > 0 && (
                           <div className="flex items-center -space-x-1.5 max-w-[75%] overflow-hidden">
                             {slotParticipants.map(p => {
@@ -657,11 +793,11 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
         </div>
       )}
 
-      {/* Option B: Ranked Top Picks Modal */}
+      {/* Ranked Top Picks Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white border border-slate-200 rounded-3xl p-5 max-w-lg w-full shadow-2xl space-y-4 relative">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white border border-slate-200 rounded-3xl p-4 sm:p-5 max-w-lg w-full max-h-[90vh] flex flex-col shadow-2xl space-y-4 relative">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-shrink-0">
               <div className="flex items-center space-x-2">
                 <Award className="w-5 h-5 text-indigo-600" />
                 <h3 className="text-base font-black text-slate-900">Ranked Top Meeting Picks</h3>
@@ -675,7 +811,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
             </div>
 
             {/* Duration Selector Tabs in Modal */}
-            <div className="flex items-center justify-between bg-slate-50 p-2 rounded-xl border border-slate-200 text-xs">
+            <div className="flex items-center justify-between bg-slate-50 p-2 rounded-xl border border-slate-200 text-xs flex-shrink-0">
               <span className="font-bold text-slate-600">Meeting Duration:</span>
               <div className="flex items-center space-x-1">
                 {[30, 60, 90, 120].map(mins => (
@@ -688,13 +824,13 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                         : 'bg-white text-slate-700 border border-slate-200'
                     }`}
                   >
-                    {mins < 60 ? `${mins} mins` : `${mins / 60} hrs`}
+                    {mins < 60 ? `${mins}m` : `${mins / 60}h`}
                   </button>
                 ))}
               </div>
             </div>
 
-            <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+            <div className="space-y-3 overflow-y-auto pr-1 flex-1">
               {bestWindows.map((win, idx) => {
                 const altPct = Math.round((win.availableCount / totalParticipants) * 100);
                 const altGoogleUrl = getGoogleCalendarUrl(
